@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hypothesis Testing — Exp Learning Hub</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <link rel="stylesheet" href="../style.css">
+  <script src="../js/nav.js"></script>
+  <script src="../js/chart-utils.js"></script>
+</head>
+<body>
+  <script>renderNav('hypothesis-testing');</script>
+
+  <div class="container">
+    <header>
+      <h1>Hypothesis Testing</h1>
+      <p class="subtitle">Is this coin fair? Build intuition for p-values and statistical significance</p>
+    </header>
+
+    <section class="explainer">
+      <p>Imagine someone hands you a coin and claims it's fair. You flip it 20 times and get 15 heads.
+         Suspicious? The <strong>p-value</strong> tells you: <em>"If the coin really were fair,
+         how likely is a result this extreme?"</em></p>
+      <p>This is exactly how A/B tests work. We assume no effect (the <strong>null hypothesis</strong>),
+         collect data, and ask whether the result is surprising enough to reject that assumption.</p>
+      <p class="highlight">Flip the coin below. Watch the p-value update in real time as evidence accumulates.</p>
+    </section>
+
+    <div class="controls">
+      <div class="slider-group">
+        <label>Flips per test: <span id="flipsValue">20</span></label>
+        <input type="range" id="numFlips" min="5" max="500" value="20" step="5">
+      </div>
+      <div class="slider-group">
+        <label>True coin bias: <span id="biasValue">0.50</span></label>
+        <input type="range" id="coinBias" min="0.30" max="0.70" value="0.50" step="0.01">
+      </div>
+      <div class="slider-group">
+        <label>Significance level (alpha): <span id="alphaValue">0.05</span></label>
+        <input type="range" id="alpha" min="0.01" max="0.20" value="0.05" step="0.01">
+      </div>
+    </div>
+
+    <!-- SINGLE TEST -->
+    <h2 class="section-title">Single Test — Is This Coin Fair?</h2>
+    <p class="section-desc">Each flip adds evidence. The p-value updates after every flip. Can you reject the null?</p>
+
+    <div class="metrics">
+      <div class="metric-card"><div class="metric-label">Heads / Flips</div><div class="metric-value" id="headsCount">—</div></div>
+      <div class="metric-card"><div class="metric-label">P-value</div><div class="metric-value" id="pValue">—</div></div>
+      <div class="metric-card">
+        <div class="metric-label">Verdict</div>
+        <div class="metric-value" id="verdict" style="font-size: 1.1rem;">—</div>
+      </div>
+    </div>
+
+    <div class="chart-actions">
+      <button id="flipOne">Flip 1</button>
+      <button id="flipTen" class="btn-secondary">Flip 10</button>
+      <button id="flipAll" class="btn-secondary">Flip All</button>
+      <button id="resetFlips" class="btn-danger">Reset</button>
+    </div>
+
+    <div class="chart-wrap" id="pvalueWrap">
+      <div id="pvalueChart"></div>
+      <div class="tooltip-d3" id="pvalueTooltip"></div>
+    </div>
+
+    <!-- DISTRIBUTION OF P-VALUES -->
+    <h2 class="section-title">Distribution of P-values Across Tests</h2>
+    <p class="section-desc">Run many tests and see how p-values distribute. With a fair coin (bias = 0.50),
+       p-values should be <strong>uniform</strong> — about 5% will fall below alpha by pure chance.
+       With a biased coin, p-values pile up near zero.</p>
+
+    <div class="metrics">
+      <div class="metric-card"><div class="metric-label">Tests Run</div><div class="metric-value" id="testCount">0</div></div>
+      <div class="metric-card"><div class="metric-label">Significant</div><div class="metric-value" id="sigCount">—</div></div>
+      <div class="metric-card"><div class="metric-label">Rejection Rate</div><div class="metric-value" id="rejRate">—</div></div>
+    </div>
+
+    <div class="chart-actions">
+      <button id="runOne">Run 1 Test</button>
+      <button id="runTen" class="btn-secondary">Run 10</button>
+      <button id="runHundred" class="btn-secondary">Run 100</button>
+      <button id="resetTests" class="btn-danger">Reset</button>
+    </div>
+
+    <div class="chart-wrap" id="distWrap">
+      <div id="distChart"></div>
+      <div class="tooltip-d3" id="distTooltip"></div>
+    </div>
+    <div id="lastP" class="last-sample" style="display:none">&#9654; Last p-value: <strong id="lastPValue"></strong></div>
+
+    <section class="takeaway">
+      <h3>Why this matters for A/B testing</h3>
+      <p>When a coin is fair (no real effect), about <strong>alpha %</strong> of tests will still appear significant —
+         these are <strong>false positives</strong>. This is the fundamental tradeoff of hypothesis testing:
+         the significance level you choose directly controls how often you'll be fooled by noise.</p>
+      <p>Try setting the bias to 0.50 and running 100 tests. Count how many are "significant."
+         That's your false positive rate — and it should be close to alpha.</p>
+    </section>
+  </div>
+
+  <script>
+    // --- State ---
+    let numFlips = 20, bias = 0.50, alpha = 0.05;
+    let flips = []; // array of 0/1 for current single test
+    let pvalueTests = []; // array of p-values from completed tests
+
+    // --- P-value calculation (two-sided binomial test approximation using normal) ---
+    // For exact: use sum of binomial PMFs. For speed, use normal approximation.
+    function binomialPValue(heads, n) {
+      if (n === 0) return 1;
+      const p0 = 0.5; // null hypothesis: fair coin
+      const expected = n * p0;
+      const std = Math.sqrt(n * p0 * (1 - p0));
+      if (std === 0) return 1;
+      const z = Math.abs(heads - expected) / std;
+      // Two-sided p-value using normal approximation
+      return 2 * (1 - normalCDF(z));
+    }
+
+    function normalCDF(z) {
+      // Abramowitz & Stegun approximation
+      const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741, a4 = -1.453152027, a5 = 1.061405429;
+      const p = 0.3275911;
+      const sign = z < 0 ? -1 : 1;
+      z = Math.abs(z);
+      const t = 1.0 / (1.0 + p * z);
+      const y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-z * z / 2);
+      return 0.5 * (1.0 + sign * y);
+    }
+
+    // =================== SINGLE TEST: P-VALUE OVER FLIPS ===================
+    const pc = createChart('#pvalueChart');
+    addAxisLabels(pc, 'Flip #', 'P-value');
+
+    const pLineGen = d3.line().x(d => pc.x(d.x)).y(d => pc.y(d.y)).curve(d3.curveStepAfter);
+    const pMainPath = pc.g.append('path').attr('fill', 'none').attr('stroke', '#4F46E5').attr('stroke-width', 2);
+
+    // Alpha threshold line
+    const alphaLine = pc.g.append('line').attr('stroke', '#EF4444').attr('stroke-width', 2).attr('stroke-dasharray', '8 4');
+    const alphaLabel = pc.g.append('text').attr('fill', '#EF4444').attr('font-size', 12);
+
+    // Shaded rejection region
+    const rejectRect = pc.g.append('rect').attr('fill', '#FEE2E2').attr('opacity', 0.5);
+
+    const pHover = addLineHover(pc, '#pvalueWrap', document.getElementById('pvalueTooltip'), {
+      formatTooltip: d => `Flip #${d.x}<br>Heads: ${d.heads}/${d.x} (${(d.heads/d.x*100).toFixed(0)}%)<br>P-value: ${d.y.toFixed(4)}`
+    });
+
+    function updateSingleTest() {
+      const n = flips.length;
+      const heads = flips.reduce((a, b) => a + b, 0);
+      const pval = binomialPValue(heads, n);
+
+      document.getElementById('headsCount').textContent = n > 0 ? `${heads} / ${n}` : '—';
+      document.getElementById('pValue').textContent = n > 0 ? pval.toFixed(4) : '—';
+      const verdictEl = document.getElementById('verdict');
+      if (n === 0) { verdictEl.textContent = '—'; verdictEl.style.color = '#1a1a2e'; }
+      else if (pval < alpha) { verdictEl.textContent = 'Reject H₀ (significant)'; verdictEl.style.color = '#EF4444'; }
+      else { verdictEl.textContent = 'Fail to reject H₀'; verdictEl.style.color = '#6b7280'; }
+
+      // Build cumulative p-value data
+      const data = [];
+      let cumHeads = 0;
+      for (let i = 0; i < n; i++) {
+        cumHeads += flips[i];
+        const p = binomialPValue(cumHeads, i + 1);
+        data.push({ x: i + 1, y: p, heads: cumHeads });
+      }
+      pHover.update(data);
+
+      updateAxes(pc, [1, Math.max(numFlips, n)], [0, 1], { yTicks: 5, yFormat: d3.format('.2f') });
+      const t = d3.transition().duration(200);
+
+      pMainPath.datum(data).transition(t).attr('d', pLineGen);
+
+      // Alpha line + rejection region
+      alphaLine.attr('x1', 0).attr('x2', pc.width).attr('y1', pc.y(alpha)).attr('y2', pc.y(alpha));
+      alphaLabel.attr('x', pc.width - 5).attr('y', pc.y(alpha) - 5).attr('text-anchor', 'end').text(`α = ${alpha}`);
+      rejectRect.attr('x', 0).attr('width', pc.width).attr('y', pc.y(alpha)).attr('height', pc.height - pc.y(alpha));
+    }
+
+    function doFlips(count) {
+      const remaining = numFlips - flips.length;
+      const todo = Math.min(count, remaining);
+      for (let i = 0; i < todo; i++) flips.push(Math.random() < bias ? 1 : 0);
+      updateSingleTest();
+    }
+
+    function resetFlips() { flips = []; updateSingleTest(); }
+
+    // =================== DISTRIBUTION OF P-VALUES ===================
+    const dc = createChart('#distChart');
+    addAxisLabels(dc, 'P-value', 'Count');
+    dc.x.domain([0, 1]);
+
+    const dBarsG = dc.g.append('g');
+    const dAlphaLine = dc.g.append('line').attr('stroke', '#EF4444').attr('stroke-width', 2).attr('stroke-dasharray', '8 4');
+    const dAlphaLabel = dc.g.append('text').attr('fill', '#EF4444').attr('font-size', 12);
+    const dAlphaRect = dc.g.append('rect').attr('fill', '#FEE2E2').attr('opacity', 0.4);
+    const dTooltip = document.getElementById('distTooltip');
+
+    const P_BIN_W = 0.05, P_NUM_BINS = 20;
+
+    function runFullTest() {
+      let heads = 0;
+      for (let i = 0; i < numFlips; i++) if (Math.random() < bias) heads++;
+      return binomialPValue(heads, numFlips);
+    }
+
+    function updateDistChart() {
+      const count = pvalueTests.length;
+      document.getElementById('testCount').textContent = count.toLocaleString();
+
+      const bins = new Array(P_NUM_BINS).fill(0);
+      let sigCount = 0;
+      pvalueTests.forEach(p => {
+        bins[Math.min(Math.floor(p / P_BIN_W), P_NUM_BINS - 1)]++;
+        if (p < alpha) sigCount++;
+      });
+      const maxCount = d3.max(bins) || 1;
+
+      document.getElementById('sigCount').textContent = count ? sigCount.toLocaleString() : '—';
+      document.getElementById('rejRate').textContent = count ? (sigCount / count * 100).toFixed(1) + '%' : '—';
+
+      if (count > 0) {
+        document.getElementById('lastPValue').textContent = pvalueTests[count - 1].toFixed(4);
+        document.getElementById('lastP').style.display = 'inline-block';
+      } else {
+        document.getElementById('lastP').style.display = 'none';
+      }
+
+      updateAxes(dc, [0, 1], [0, Math.max(maxCount, 1)], { xTicks: 10, xFormat: d3.format('.2f') });
+
+      const lastBin = count > 0 ? Math.min(Math.floor(pvalueTests[count - 1] / P_BIN_W), P_NUM_BINS - 1) : -1;
+      const alphaBinEnd = Math.ceil(alpha / P_BIN_W);
+      const barData = bins.map((c, i) => ({ idx: i, count: c, center: i * P_BIN_W + P_BIN_W / 2 }));
+      const t = d3.transition().duration(200);
+
+      const bars = dBarsG.selectAll('rect').data(barData, d => d.idx);
+      bars.enter().append('rect')
+        .attr('x', d => dc.x(d.idx * P_BIN_W) + 1)
+        .attr('width', Math.max(dc.x(P_BIN_W) - dc.x(0) - 2, 1))
+        .attr('y', dc.height).attr('height', 0).attr('rx', 1)
+        .on('mousemove', function(event, d) {
+          const wr = document.getElementById('distWrap').getBoundingClientRect();
+          const cr = document.getElementById('distChart').getBoundingClientRect();
+          dTooltip.style.opacity = '1';
+          dTooltip.innerHTML = `p: ${(d.idx * P_BIN_W).toFixed(2)}–${((d.idx + 1) * P_BIN_W).toFixed(2)}<br>Count: ${d.count}`;
+          dTooltip.style.left = (cr.left - wr.left + dc.margin.left + dc.x(d.center) + 12) + 'px';
+          dTooltip.style.top = (cr.top - wr.top + dc.margin.top + dc.y(d.count) - 30) + 'px';
+        })
+        .on('mouseleave', () => dTooltip.style.opacity = '0')
+        .merge(bars).transition(t)
+        .attr('x', d => dc.x(d.idx * P_BIN_W) + 1)
+        .attr('width', Math.max(dc.x(P_BIN_W) - dc.x(0) - 2, 1))
+        .attr('y', d => dc.y(d.count))
+        .attr('height', d => dc.height - dc.y(d.count))
+        .attr('fill', d => d.idx === lastBin ? '#818CF8' : (d.idx < alphaBinEnd ? '#F87171' : '#4F46E5'))
+        .attr('stroke', '#3730A3').attr('stroke-width', 0.5);
+      bars.exit().remove();
+
+      // Alpha region
+      dAlphaLine.attr('x1', dc.x(alpha)).attr('x2', dc.x(alpha)).attr('y1', 0).attr('y2', dc.height);
+      dAlphaLabel.attr('x', dc.x(alpha) + 4).attr('y', 12).attr('text-anchor', 'start').text(`α = ${alpha}`);
+      dAlphaRect.attr('x', 0).attr('width', dc.x(alpha)).attr('y', 0).attr('height', dc.height);
+    }
+
+    function runTests(count) {
+      for (let i = 0; i < count; i++) pvalueTests.push(runFullTest());
+      updateDistChart();
+    }
+
+    function resetTests() { pvalueTests = []; updateDistChart(); }
+
+    // --- Wiring ---
+    const flipsSlider = document.getElementById('numFlips');
+    const biasSlider = document.getElementById('coinBias');
+    const alphaSlider = document.getElementById('alpha');
+
+    flipsSlider.addEventListener('input', () => { numFlips = parseInt(flipsSlider.value); document.getElementById('flipsValue').textContent = numFlips; resetFlips(); resetTests(); });
+    biasSlider.addEventListener('input', () => { bias = parseFloat(biasSlider.value); document.getElementById('biasValue').textContent = bias.toFixed(2); resetFlips(); resetTests(); });
+    alphaSlider.addEventListener('input', () => { alpha = parseFloat(alphaSlider.value); document.getElementById('alphaValue').textContent = alpha.toFixed(2); updateSingleTest(); updateDistChart(); });
+
+    holdToRepeat(document.getElementById('flipOne'), () => doFlips(1));
+    document.getElementById('flipTen').addEventListener('click', () => doFlips(10));
+    document.getElementById('flipAll').addEventListener('click', () => doFlips(numFlips));
+    document.getElementById('resetFlips').addEventListener('click', resetFlips);
+
+    holdToRepeat(document.getElementById('runOne'), () => runTests(1));
+    document.getElementById('runTen').addEventListener('click', () => runTests(10));
+    document.getElementById('runHundred').addEventListener('click', () => runTests(100));
+    document.getElementById('resetTests').addEventListener('click', resetTests);
+
+    // Initial render
+    updateSingleTest();
+    updateDistChart();
+  </script>
+</body>
+</html>

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Experimentation Learning Hub</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="js/nav.js"></script>
+</head>
+<body>
+  <script>renderNav();</script>
+
+  <div class="container" style="max-width: 900px;">
+    <div class="hub-header">
+      <h1>Experimentation Learning Hub</h1>
+      <p class="subtitle">Interactive simulations to build deep intuition about A/B testing — from coin flips to confidence intervals.</p>
+    </div>
+
+    <div class="module-grid">
+
+      <!-- Tier 1: Foundations -->
+      <a href="modules/law-of-large-numbers.html" class="module-card">
+        <div class="card-tier tier-foundations">Tier 1 — Foundations</div>
+        <h3>1. Law of Large Numbers</h3>
+        <p>Flip a coin and watch randomness give way to predictability. Understand why small samples are noisy.</p>
+        <span class="card-status status-live">Interactive</span>
+      </a>
+
+      <a href="modules/hypothesis-testing.html" class="module-card">
+        <div class="card-tier tier-foundations">Tier 1 — Foundations</div>
+        <h3>2. Hypothesis Testing</h3>
+        <p>Is this coin fair? Build intuition for p-values, significance, and the logic of null hypothesis testing.</p>
+        <span class="card-status status-live">Interactive</span>
+      </a>
+
+      <div class="module-card" style="opacity: 0.5; cursor: default;">
+        <div class="card-tier tier-foundations">Tier 1 — Foundations</div>
+        <h3>3. Confidence Intervals</h3>
+        <p>A point estimate without an interval is a guess. Explore how precision improves with sample size.</p>
+        <span class="card-status status-coming">Coming soon</span>
+      </div>
+
+      <div class="module-card" style="opacity: 0.5; cursor: default;">
+        <div class="card-tier tier-foundations">Tier 1 — Foundations</div>
+        <h3>4. Power &amp; Sample Size</h3>
+        <p>The most important number you calculate before launching a test. Explore the power–sample size tradeoff.</p>
+        <span class="card-status status-coming">Coming soon</span>
+      </div>
+
+      <!-- Tier 2: Core -->
+      <div class="module-card" style="opacity: 0.5; cursor: default;">
+        <div class="card-tier tier-core">Tier 2 — Core A/B Testing</div>
+        <h3>5. A/A Tests</h3>
+        <p>Before you test anything, test nothing. Validate that your false positive rate matches expectations.</p>
+        <span class="card-status status-coming">Coming soon</span>
+      </div>
+
+      <div class="module-card" style="opacity: 0.5; cursor: default;">
+        <div class="card-tier tier-core">Tier 2 — Core A/B Testing</div>
+        <h3>6. A/B Test Simulation</h3>
+        <p>One test result is a sample of one. Run thousands of simulated experiments and see the full picture.</p>
+        <span class="card-status status-coming">Coming soon</span>
+      </div>
+
+      <!-- Tier 3: Advanced -->
+      <div class="module-card" style="opacity: 0.5; cursor: default;">
+        <div class="card-tier tier-advanced">Tier 3 — Advanced Pitfalls</div>
+        <h3>9. Winner's Curse</h3>
+        <p>Why your winning experiments probably aren't as good as they look.</p>
+        <span class="card-status status-coming">Coming soon</span>
+      </div>
+
+      <div class="module-card" style="opacity: 0.5; cursor: default;">
+        <div class="card-tier tier-advanced">Tier 3 — Advanced Pitfalls</div>
+        <h3>10. Peeking</h3>
+        <p>Every time you check results early, you're raising your false positive rate.</p>
+        <span class="card-status status-coming">Coming soon</span>
+      </div>
+
+    </div>
+  </div>
+</body>
+</html>

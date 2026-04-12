@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Coin Toss Simulator — React + Plotly</title>
+  <script src="https://cdn.plot.ly/plotly-2.35.0.min.js"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: #f8f9fa; color: #1a1a2e; line-height: 1.6; }
+    .container { max-width: 800px; margin: 0 auto; padding: 2rem 1.5rem; }
+    h1 { font-size: 2rem; font-weight: 700; margin-bottom: 0.25rem; }
+    .subtitle { font-size: 1.1rem; color: #6b7280; margin-bottom: 1.5rem; }
+    .section-title { font-size: 1.25rem; font-weight: 600; margin-top: 2rem; margin-bottom: 0.25rem; }
+    .section-desc { font-size: 0.95rem; color: #6b7280; margin-bottom: 1rem; }
+    .explainer { background: #fff; border-left: 4px solid #4F46E5; padding: 1.25rem 1.5rem; border-radius: 0 8px 8px 0; margin-bottom: 2rem; }
+    .explainer p { margin-bottom: 0.75rem; }
+    .explainer p:last-child { margin-bottom: 0; }
+    .highlight { color: #4F46E5; font-weight: 600; }
+    .controls { display: flex; align-items: flex-end; gap: 1.5rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+    .slider-group { flex: 1; min-width: 200px; }
+    .slider-group label { display: block; font-size: 0.875rem; font-weight: 500; color: #374151; margin-bottom: 0.5rem; }
+    .slider-group label span { font-weight: 700; color: #4F46E5; }
+    input[type="range"] { width: 100%; height: 6px; -webkit-appearance: none; appearance: none; background: #e5e7eb; border-radius: 3px; outline: none; }
+    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; background: #4F46E5; border-radius: 50%; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+    .chart-actions { display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
+    button { padding: 0.5rem 1.25rem; background: #4F46E5; color: white; border: none; border-radius: 6px; font-size: 0.875rem; font-weight: 500; cursor: pointer; white-space: nowrap; user-select: none; transition: background 0.15s; }
+    button:hover { background: #4338CA; }
+    button:active { background: #3730A3; }
+    .btn-secondary { background: #6366F1; }
+    .btn-secondary:hover { background: #4F46E5; }
+    .btn-danger { background: #EF4444; }
+    .btn-danger:hover { background: #DC2626; }
+    .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1rem; }
+    .metric-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1rem 1.25rem; text-align: center; }
+    .metric-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; margin-bottom: 0.25rem; }
+    .metric-value { font-size: 1.75rem; font-weight: 700; color: #1a1a2e; }
+    .chart-wrap { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 0.5rem; margin-bottom: 1rem; min-height: 360px; }
+    .last-sample { font-size: 0.9rem; color: #6366F1; margin-bottom: 2rem; padding: 0.5rem 0.75rem; background: #EEF2FF; border-radius: 6px; display: inline-block; }
+    .takeaway { background: #fefce8; border-left: 4px solid #eab308; padding: 1.25rem 1.5rem; border-radius: 0 8px 8px 0; }
+    .takeaway h3 { font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem; color: #854d0e; }
+    .takeaway p { color: #713f12; font-size: 0.95rem; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useCallback } = React;
+
+    // --- Helpers ---
+    function runTrial(n, bias) {
+      let heads = 0;
+      for (let i = 0; i < n; i++) if (Math.random() < bias) heads++;
+      return (heads / n) * 100;
+    }
+
+    function simulateSingle(n, bias) {
+      const tossNums = [], cumPct = [];
+      let cumSum = 0;
+      for (let i = 0; i < n; i++) {
+        cumSum += (Math.random() < bias) ? 1 : 0;
+        tossNums.push(i + 1);
+        cumPct.push((cumSum / (i + 1)) * 100);
+      }
+      return { tossNums, cumPct, totalHeads: cumSum, finalPct: (cumSum / n) * 100 };
+    }
+
+    function mean(arr) { return arr.reduce((a, b) => a + b, 0) / arr.length; }
+    function std(arr) { const m = mean(arr); return Math.sqrt(arr.reduce((a, b) => a + (b - m) ** 2, 0) / arr.length); }
+
+    // --- Components ---
+    function MetricCard({ label, value }) {
+      return <div className="metric-card"><div className="metric-label">{label}</div><div className="metric-value">{value}</div></div>;
+    }
+
+    function SingleChart({ data, bias }) {
+      const ref = useRef(null);
+      useEffect(() => {
+        if (!ref.current || !data) return;
+        Plotly.react(ref.current, [
+          { x: data.tossNums, y: data.cumPct, type: 'scatter', mode: 'lines', name: 'Cumulative % Heads', line: { color: '#4F46E5', width: 2 } },
+          { x: [1, data.tossNums.length], y: [bias * 100, bias * 100], type: 'scatter', mode: 'lines', name: `True probability (${(bias * 100).toFixed(0)}%)`, line: { color: '#EF4444', dash: 'dash', width: 2 } }
+        ], {
+          height: 340, xaxis: { title: 'Toss #', gridcolor: '#f0f0f0' }, yaxis: { title: '% Heads', range: [0, 100], gridcolor: '#f0f0f0' },
+          margin: { t: 15, r: 30, b: 45, l: 55 }, plot_bgcolor: '#fafafa', paper_bgcolor: '#fff',
+          legend: { x: 0.6, y: 0.95 }, font: { family: 'Inter, system-ui, sans-serif', size: 13 }
+        }, { responsive: true });
+      }, [data, bias]);
+      return <div ref={ref}></div>;
+    }
+
+    function DistChart({ trials, bias }) {
+      const ref = useRef(null);
+      useEffect(() => {
+        if (!ref.current) return;
+        const biasPct = bias * 100;
+
+        if (trials.length === 0) {
+          Plotly.react(ref.current, [], {
+            height: 340, xaxis: { title: '% Heads', range: [0, 100], gridcolor: '#f0f0f0' }, yaxis: { title: 'Count', gridcolor: '#f0f0f0' },
+            margin: { t: 15, r: 30, b: 45, l: 55 }, plot_bgcolor: '#fafafa', paper_bgcolor: '#fff',
+            font: { family: 'Inter, system-ui, sans-serif', size: 13 },
+            shapes: [{ type: 'line', x0: biasPct, x1: biasPct, y0: 0, y1: 1, yref: 'paper', line: { color: '#EF4444', dash: 'dash', width: 2 } }],
+            annotations: [{ x: biasPct, y: 1, yref: 'paper', text: `True: ${biasPct.toFixed(0)}%`, showarrow: false, yanchor: 'bottom', font: { color: '#EF4444', size: 12 } }]
+          }, { responsive: true });
+          return;
+        }
+
+        const binW = 2;
+        const lastVal = trials[trials.length - 1];
+        const lastBin = Math.min(Math.floor(lastVal / binW), 49);
+        const counts = new Array(50).fill(0);
+        trials.forEach(v => { counts[Math.min(Math.floor(v / binW), 49)]++; });
+        const centers = counts.map((_, i) => i * binW + binW / 2);
+        const colors = counts.map((_, i) => i === lastBin ? '#818CF8' : '#4F46E5');
+        const m = mean(trials);
+
+        Plotly.react(ref.current, [{
+          x: centers, y: counts, type: 'bar', width: binW * 0.9,
+          marker: { color: colors, line: { color: '#3730A3', width: 0.5 } },
+          hovertemplate: '%{x:.0f}% heads<br>Count: %{y}<extra></extra>'
+        }], {
+          height: 340, bargap: 0.05,
+          xaxis: { title: '% Heads', range: [0, 100], gridcolor: '#f0f0f0', dtick: 10 },
+          yaxis: { title: 'Count', gridcolor: '#f0f0f0' },
+          margin: { t: 15, r: 30, b: 45, l: 55 }, plot_bgcolor: '#fafafa', paper_bgcolor: '#fff',
+          font: { family: 'Inter, system-ui, sans-serif', size: 13 },
+          shapes: [
+            { type: 'line', x0: biasPct, x1: biasPct, y0: 0, y1: 1, yref: 'paper', line: { color: '#EF4444', dash: 'dash', width: 2 } },
+            { type: 'line', x0: m, x1: m, y0: 0, y1: 1, yref: 'paper', line: { color: '#10B981', dash: 'dot', width: 2 } }
+          ],
+          annotations: [
+            { x: biasPct, y: 1, yref: 'paper', text: `True: ${biasPct.toFixed(0)}%`, showarrow: false, yanchor: 'bottom', font: { color: '#EF4444', size: 12 } },
+            { x: m, y: 0.92, yref: 'paper', text: `Mean: ${m.toFixed(1)}%`, showarrow: false, yanchor: 'bottom', font: { color: '#10B981', size: 12 } }
+          ]
+        }, { responsive: true });
+      }, [trials, bias]);
+      return <div ref={ref}></div>;
+    }
+
+    // --- App ---
+    function App() {
+      const [numTosses, setNumTosses] = useState(100);
+      const [bias, setBias] = useState(0.5);
+      const [singleData, setSingleData] = useState(null);
+      const [trials, setTrials] = useState([]);
+      const holdRef = useRef(null);
+
+      const resim = useCallback(() => setSingleData(simulateSingle(numTosses, bias)), [numTosses, bias]);
+      useEffect(() => { resim(); }, [resim]);
+
+      const draw = useCallback((count) => {
+        setTrials(prev => {
+          const next = [...prev];
+          for (let i = 0; i < count; i++) next.push(runTrial(numTosses, bias));
+          return next;
+        });
+      }, [numTosses, bias]);
+
+      const reset = () => setTrials([]);
+
+      // Hold-to-repeat
+      const startHold = () => { draw(1); holdRef.current = setInterval(() => draw(1), 120); };
+      const stopHold = () => clearInterval(holdRef.current);
+
+      return (
+        <div className="container">
+          <header>
+            <h1>The Law of Large Numbers</h1>
+            <p className="subtitle">Flip a coin and watch randomness give way to predictability</p>
+          </header>
+
+          <section className="explainer">
+            <p>With a fair coin, we expect 50% heads. But flip it only 10 times and you might see 70% or 30%.
+               Flip it 10,000 times and the result will be remarkably close to 50%.
+               This is the <strong>Law of Large Numbers</strong> — as sample size grows, the observed average converges to the true average.</p>
+            <p className="highlight">Drag the slider below and watch the cumulative heads percentage stabilize.</p>
+          </section>
+
+          <div className="controls">
+            <div className="slider-group">
+              <label>Tosses per trial: <span>{numTosses.toLocaleString()}</span></label>
+              <input type="range" min="10" max="10000" step="10" value={numTosses}
+                onChange={e => { setNumTosses(parseInt(e.target.value)); setTrials([]); }} />
+            </div>
+            <div className="slider-group">
+              <label>Coin bias (P of heads): <span>{bias.toFixed(2)}</span></label>
+              <input type="range" min="0.01" max="0.99" step="0.01" value={bias}
+                onChange={e => { setBias(parseFloat(e.target.value)); setTrials([]); }} />
+            </div>
+          </div>
+
+          <h2 className="section-title">Single Trial</h2>
+          <p className="section-desc">One experiment — watch the cumulative % heads converge (or not) as tosses accumulate.</p>
+
+          <div className="metrics">
+            <MetricCard label="Total Heads" value={singleData ? singleData.totalHeads.toLocaleString() : '—'} />
+            <MetricCard label="Observed % Heads" value={singleData ? singleData.finalPct.toFixed(1) + '%' : '—'} />
+            <MetricCard label="True Probability" value={(bias * 100).toFixed(0) + '%'} />
+          </div>
+          <div className="chart-actions"><button onClick={resim}>Re-simulate</button></div>
+          <div className="chart-wrap"><SingleChart data={singleData} bias={bias} /></div>
+
+          <h2 className="section-title">Distribution Across Trials</h2>
+          <p className="section-desc">Each click runs a new trial and adds its observed % heads to the histogram.
+             Watch the distribution tighten around the true probability as you add more trials.</p>
+
+          <div className="metrics">
+            <MetricCard label="Trials Run" value={trials.length.toLocaleString()} />
+            <MetricCard label="Mean % Heads" value={trials.length ? mean(trials).toFixed(1) + '%' : '—'} />
+            <MetricCard label="Std Dev" value={trials.length ? std(trials).toFixed(2) + '%' : '—'} />
+          </div>
+
+          <div className="chart-actions">
+            <button onMouseDown={startHold} onMouseUp={stopHold} onMouseLeave={stopHold}>Draw 1 Sample</button>
+            <button className="btn-secondary" onClick={() => draw(10)}>Draw 10</button>
+            <button className="btn-secondary" onClick={() => draw(100)}>Draw 100</button>
+            <button className="btn-danger" onClick={reset}>Reset</button>
+          </div>
+          <div className="chart-wrap"><DistChart trials={trials} bias={bias} /></div>
+
+          {trials.length > 0 && (
+            <div className="last-sample">
+              &#9654; Last sample: <strong>{trials[trials.length - 1].toFixed(1)}%</strong>
+            </div>
+          )}
+
+          <section className="takeaway">
+            <h3>Why this matters for A/B testing</h3>
+            <p>The single trial chart shows why you shouldn't peek at early results — they're noisy.
+               The distribution chart shows something deeper: even with a fixed sample size, each experiment
+               gives a <em>different</em> answer. The histogram is the <strong>sampling distribution</strong> —
+               the foundation of every p-value and confidence interval you'll ever compute.</p>
+          </section>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

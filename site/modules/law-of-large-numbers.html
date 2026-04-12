@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Law of Large Numbers — Exp Learning Hub</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <link rel="stylesheet" href="../style.css">
+  <script src="../js/nav.js"></script>
+  <script src="../js/chart-utils.js"></script>
+</head>
+<body>
+  <script>renderNav('law-of-large-numbers');</script>
+
+  <div class="container">
+    <header>
+      <h1>The Law of Large Numbers</h1>
+      <p class="subtitle">Flip a coin and watch randomness give way to predictability</p>
+    </header>
+
+    <section class="explainer">
+      <p>With a fair coin, we expect 50% heads. But flip it only 10 times and you might see 70% or 30%.
+         Flip it 10,000 times and the result will be remarkably close to 50%.
+         This is the <strong>Law of Large Numbers</strong> — as sample size grows, the observed average converges to the true average.</p>
+      <p class="highlight">Drag the slider below and watch the cumulative heads percentage stabilize.</p>
+    </section>
+
+    <div class="controls">
+      <div class="slider-group">
+        <label>Tosses per trial: <span id="tossesValue">100</span></label>
+        <input type="range" id="numTosses" min="10" max="10000" value="100" step="10">
+      </div>
+      <div class="slider-group">
+        <label>Coin bias (P of heads): <span id="biasValue">0.50</span></label>
+        <input type="range" id="coinBias" min="0.01" max="0.99" value="0.50" step="0.01">
+      </div>
+    </div>
+
+    <!-- SINGLE TRIAL -->
+    <h2 class="section-title">Single Trial</h2>
+    <p class="section-desc">One experiment — watch the cumulative % heads converge as tosses accumulate.</p>
+    <div class="metrics">
+      <div class="metric-card"><div class="metric-label">Total Heads</div><div class="metric-value" id="totalHeads">—</div></div>
+      <div class="metric-card"><div class="metric-label">Observed % Heads</div><div class="metric-value" id="pctHeads">—</div></div>
+      <div class="metric-card"><div class="metric-label">True Probability</div><div class="metric-value" id="trueBias">50%</div></div>
+    </div>
+    <div class="chart-actions"><button id="resimulate">Re-simulate</button></div>
+    <div class="chart-wrap" id="singleWrap">
+      <div id="singleChart"></div>
+      <div class="tooltip-d3" id="singleTooltip"></div>
+    </div>
+
+    <!-- DISTRIBUTION -->
+    <h2 class="section-title">Distribution Across Trials</h2>
+    <p class="section-desc">Each click runs a new trial and adds its result to the histogram.
+       Watch the distribution tighten around the true probability as you accumulate trials.</p>
+    <div class="metrics">
+      <div class="metric-card"><div class="metric-label">Trials Run</div><div class="metric-value" id="trialCount">0</div></div>
+      <div class="metric-card"><div class="metric-label">Mean % Heads</div><div class="metric-value" id="trialMean">—</div></div>
+      <div class="metric-card"><div class="metric-label">Std Dev</div><div class="metric-value" id="trialStd">—</div></div>
+    </div>
+    <div class="chart-actions">
+      <button id="drawOne">Draw 1 Sample</button>
+      <button id="drawTen" class="btn-secondary">Draw 10</button>
+      <button id="drawHundred" class="btn-secondary">Draw 100</button>
+      <button id="resetTrials" class="btn-danger">Reset</button>
+    </div>
+    <div class="chart-wrap" id="distWrap">
+      <div id="distChart"></div>
+      <div class="tooltip-d3" id="distTooltip"></div>
+    </div>
+    <div id="lastSample" class="last-sample" style="display:none">&#9654; Last sample: <strong id="lastSampleValue"></strong></div>
+
+    <section class="takeaway">
+      <h3>Why this matters for A/B testing</h3>
+      <p>The single trial chart shows why you shouldn't peek at early results — they're noisy.
+         The distribution chart shows something deeper: even with a fixed sample size, each experiment
+         gives a <em>different</em> answer. The histogram is the <strong>sampling distribution</strong> —
+         the foundation of every p-value and confidence interval you'll ever compute.</p>
+    </section>
+  </div>
+
+  <script>
+    // --- State ---
+    let numTosses = 100, bias = 0.50, trialResults = [];
+
+    // --- Single Trial Chart (uses shared utils) ---
+    const sc = createChart('#singleChart');
+    addAxisLabels(sc, 'Toss #', '% Heads');
+
+    const lineGen = d3.line().x(d => sc.x(d.x)).y(d => sc.y(d.y));
+    const mainPath = sc.g.append('path').attr('fill', 'none').attr('stroke', '#4F46E5').attr('stroke-width', 2);
+    const refPath = sc.g.append('path').attr('fill', 'none').attr('stroke', '#EF4444').attr('stroke-width', 2).attr('stroke-dasharray', '8 4');
+
+    // Legend
+    const leg = sc.g.append('g').attr('transform', `translate(${sc.width - 210}, 10)`).style('font-size', '12px');
+    leg.append('line').attr('x1',0).attr('y1',7).attr('x2',20).attr('y2',7).attr('stroke','#4F46E5').attr('stroke-width',2);
+    leg.append('text').attr('x',26).attr('y',11).text('Cumulative % Heads');
+    leg.append('line').attr('x1',0).attr('y1',27).attr('x2',20).attr('y2',27).attr('stroke','#EF4444').attr('stroke-width',2).attr('stroke-dasharray','8 4');
+    const refText = leg.append('text').attr('x',26).attr('y',31);
+
+    const hover = addLineHover(sc, '#singleWrap', document.getElementById('singleTooltip'), {
+      formatTooltip: d => `Toss #${d.x.toLocaleString()}<br>% Heads: ${d.y.toFixed(1)}%`
+    });
+
+    function simulateSingle() {
+      const data = [];
+      let cum = 0;
+      for (let i = 0; i < numTosses; i++) { cum += (Math.random() < bias) ? 1 : 0; data.push({ x: i + 1, y: (cum / (i + 1)) * 100 }); }
+      hover.update(data);
+
+      document.getElementById('totalHeads').textContent = cum.toLocaleString();
+      document.getElementById('pctHeads').textContent = (cum / numTosses * 100).toFixed(1) + '%';
+      document.getElementById('trueBias').textContent = (bias * 100).toFixed(0) + '%';
+
+      updateAxes(sc, [1, numTosses], [0, 100], { xTicks: Math.min(numTosses, 10), yFormat: d => d + '%' });
+      const t = d3.transition().duration(300);
+      mainPath.datum(data).transition(t).attr('d', lineGen);
+      refPath.datum([{ x: 1, y: bias * 100 }, { x: numTosses, y: bias * 100 }]).transition(t).attr('d', lineGen);
+      refText.text(`True probability (${(bias * 100).toFixed(0)}%)`);
+    }
+
+    // --- Distribution Chart (uses shared utils) ---
+    const dc = createChart('#distChart');
+    addAxisLabels(dc, '% Heads', 'Count');
+    dc.x.domain([0, 100]);
+
+    const barsG = dc.g.append('g');
+    const refLineD = dc.g.append('line').attr('stroke','#EF4444').attr('stroke-width',2).attr('stroke-dasharray','8 4');
+    const meanLineD = dc.g.append('line').attr('stroke','#10B981').attr('stroke-width',2).attr('stroke-dasharray','4 3').style('opacity',0);
+    const refLabelD = dc.g.append('text').attr('fill','#EF4444').attr('font-size',12).attr('text-anchor','middle');
+    const meanLabelD = dc.g.append('text').attr('fill','#10B981').attr('font-size',12).attr('text-anchor','middle').style('opacity',0);
+    const dTooltip = document.getElementById('distTooltip');
+
+    const BIN_W = 2, NUM_BINS = 50;
+
+    function updateDistChart() {
+      const biasPct = bias * 100, count = trialResults.length;
+      document.getElementById('trialCount').textContent = count.toLocaleString();
+
+      const bins = new Array(NUM_BINS).fill(0);
+      trialResults.forEach(v => bins[Math.min(Math.floor(v / BIN_W), NUM_BINS - 1)]++);
+      const maxCount = d3.max(bins) || 1;
+
+      let m = 0, s = 0;
+      if (count > 0) {
+        m = trialResults.reduce((a, b) => a + b, 0) / count;
+        s = Math.sqrt(trialResults.reduce((a, b) => a + (b - m) ** 2, 0) / count);
+      }
+      document.getElementById('trialMean').textContent = count ? m.toFixed(1) + '%' : '—';
+      document.getElementById('trialStd').textContent = count ? s.toFixed(2) + '%' : '—';
+
+      if (count > 0) {
+        document.getElementById('lastSampleValue').textContent = trialResults[count - 1].toFixed(1) + '%';
+        document.getElementById('lastSample').style.display = 'inline-block';
+      } else {
+        document.getElementById('lastSample').style.display = 'none';
+      }
+
+      updateAxes(dc, [0, 100], [0, Math.max(maxCount, 1)], { xFormat: d => d + '%' });
+
+      const lastBin = count > 0 ? Math.min(Math.floor(trialResults[count - 1] / BIN_W), NUM_BINS - 1) : -1;
+      const barData = bins.map((c, i) => ({ idx: i, count: c, center: i * BIN_W + BIN_W / 2 }));
+      const t = d3.transition().duration(200);
+
+      const bars = barsG.selectAll('rect').data(barData, d => d.idx);
+      bars.enter().append('rect')
+        .attr('x', d => dc.x(d.idx * BIN_W) + 1)
+        .attr('width', Math.max(dc.x(BIN_W) - dc.x(0) - 2, 1))
+        .attr('y', dc.height).attr('height', 0).attr('rx', 1)
+        .on('mousemove', function(event, d) {
+          const wr = document.getElementById('distWrap').getBoundingClientRect();
+          const cr = document.getElementById('distChart').getBoundingClientRect();
+          dTooltip.style.opacity = '1';
+          dTooltip.innerHTML = `${d.idx * BIN_W}–${(d.idx + 1) * BIN_W}% heads<br>Count: ${d.count}`;
+          dTooltip.style.left = (cr.left - wr.left + dc.margin.left + dc.x(d.center) + 12) + 'px';
+          dTooltip.style.top = (cr.top - wr.top + dc.margin.top + dc.y(d.count) - 30) + 'px';
+        })
+        .on('mouseleave', () => dTooltip.style.opacity = '0')
+        .merge(bars).transition(t)
+        .attr('x', d => dc.x(d.idx * BIN_W) + 1)
+        .attr('width', Math.max(dc.x(BIN_W) - dc.x(0) - 2, 1))
+        .attr('y', d => dc.y(d.count))
+        .attr('height', d => dc.height - dc.y(d.count))
+        .attr('fill', d => d.idx === lastBin ? '#818CF8' : '#4F46E5')
+        .attr('stroke', '#3730A3').attr('stroke-width', 0.5);
+      bars.exit().remove();
+
+      refLineD.attr('x1', dc.x(biasPct)).attr('x2', dc.x(biasPct)).attr('y1', 0).attr('y2', dc.height);
+      refLabelD.attr('x', dc.x(biasPct)).attr('y', -4).text(`True: ${biasPct.toFixed(0)}%`);
+      if (count > 0) {
+        meanLineD.attr('x1', dc.x(m)).attr('x2', dc.x(m)).attr('y1', 0).attr('y2', dc.height).style('opacity', 1);
+        meanLabelD.attr('x', dc.x(m)).attr('y', 12).text(`Mean: ${m.toFixed(1)}%`).style('opacity', 1);
+      } else { meanLineD.style('opacity', 0); meanLabelD.style('opacity', 0); }
+    }
+
+    function drawSamples(count) {
+      for (let i = 0; i < count; i++) {
+        let h = 0; for (let j = 0; j < numTosses; j++) if (Math.random() < bias) h++;
+        trialResults.push((h / numTosses) * 100);
+      }
+      updateDistChart();
+    }
+
+    function resetTrials() { trialResults = []; updateDistChart(); }
+
+    // --- Wiring ---
+    const tossesSlider = document.getElementById('numTosses');
+    const biasSlider = document.getElementById('coinBias');
+    tossesSlider.addEventListener('input', () => { numTosses = parseInt(tossesSlider.value); document.getElementById('tossesValue').textContent = numTosses.toLocaleString(); simulateSingle(); resetTrials(); });
+    biasSlider.addEventListener('input', () => { bias = parseFloat(biasSlider.value); document.getElementById('biasValue').textContent = bias.toFixed(2); simulateSingle(); resetTrials(); });
+    document.getElementById('resimulate').addEventListener('click', simulateSingle);
+    document.getElementById('drawTen').addEventListener('click', () => drawSamples(10));
+    document.getElementById('drawHundred').addEventListener('click', () => drawSamples(100));
+    document.getElementById('resetTrials').addEventListener('click', resetTrials);
+    holdToRepeat(document.getElementById('drawOne'), () => drawSamples(1));
+
+    simulateSingle();
+    updateDistChart();
+  </script>
+</body>
+</html>

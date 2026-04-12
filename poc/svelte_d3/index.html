@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Coin Toss Simulator — D3.js</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: #f8f9fa; color: #1a1a2e; line-height: 1.6; }
+    .container { max-width: 800px; margin: 0 auto; padding: 2rem 1.5rem; }
+    h1 { font-size: 2rem; font-weight: 700; margin-bottom: 0.25rem; }
+    .subtitle { font-size: 1.1rem; color: #6b7280; margin-bottom: 1.5rem; }
+    .section-title { font-size: 1.25rem; font-weight: 600; margin-top: 2rem; margin-bottom: 0.25rem; }
+    .section-desc { font-size: 0.95rem; color: #6b7280; margin-bottom: 1rem; }
+    .explainer { background: #fff; border-left: 4px solid #4F46E5; padding: 1.25rem 1.5rem; border-radius: 0 8px 8px 0; margin-bottom: 2rem; }
+    .explainer p { margin-bottom: 0.75rem; }
+    .explainer p:last-child { margin-bottom: 0; }
+    .highlight { color: #4F46E5; font-weight: 600; }
+    .controls { display: flex; align-items: flex-end; gap: 1.5rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+    .slider-group { flex: 1; min-width: 200px; }
+    .slider-group label { display: block; font-size: 0.875rem; font-weight: 500; color: #374151; margin-bottom: 0.5rem; }
+    .slider-group label span { font-weight: 700; color: #4F46E5; }
+    input[type="range"] { width: 100%; height: 6px; -webkit-appearance: none; appearance: none; background: #e5e7eb; border-radius: 3px; outline: none; }
+    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; background: #4F46E5; border-radius: 50%; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+    .chart-actions { display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
+    button { padding: 0.5rem 1.25rem; background: #4F46E5; color: white; border: none; border-radius: 6px; font-size: 0.875rem; font-weight: 500; cursor: pointer; white-space: nowrap; user-select: none; transition: background 0.15s; }
+    button:hover { background: #4338CA; }
+    button:active { background: #3730A3; }
+    .btn-secondary { background: #6366F1; }
+    .btn-secondary:hover { background: #4F46E5; }
+    .btn-danger { background: #EF4444; }
+    .btn-danger:hover { background: #DC2626; }
+    .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1rem; }
+    .metric-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1rem 1.25rem; text-align: center; }
+    .metric-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; margin-bottom: 0.25rem; }
+    .metric-value { font-size: 1.75rem; font-weight: 700; color: #1a1a2e; }
+    .chart-wrap { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1rem 1rem 0.5rem 0.5rem; margin-bottom: 1rem; position: relative; }
+    svg { display: block; }
+    .axis text { font-size: 12px; fill: #6b7280; }
+    .axis path, .axis line { stroke: #e5e7eb; }
+    .grid line { stroke: #f0f0f0; }
+    .grid path { stroke: none; }
+    .axis-label { font-size: 13px; fill: #374151; }
+    .tooltip-d3 { position: absolute; background: rgba(26,26,46,0.9); color: #fff; padding: 6px 10px; border-radius: 6px; font-size: 12px; pointer-events: none; opacity: 0; transition: opacity 0.15s; white-space: nowrap; }
+    .last-sample { font-size: 0.9rem; color: #6366F1; margin-bottom: 2rem; padding: 0.5rem 0.75rem; background: #EEF2FF; border-radius: 6px; display: inline-block; }
+    .takeaway { background: #fefce8; border-left: 4px solid #eab308; padding: 1.25rem 1.5rem; border-radius: 0 8px 8px 0; }
+    .takeaway h3 { font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem; color: #854d0e; }
+    .takeaway p { color: #713f12; font-size: 0.95rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>The Law of Large Numbers</h1>
+      <p class="subtitle">Flip a coin and watch randomness give way to predictability</p>
+    </header>
+
+    <section class="explainer">
+      <p>With a fair coin, we expect 50% heads. But flip it only 10 times and you might see 70% or 30%.
+         Flip it 10,000 times and the result will be remarkably close to 50%.
+         This is the <strong>Law of Large Numbers</strong> — as sample size grows, the observed average converges to the true average.</p>
+      <p class="highlight">Drag the slider below and watch the cumulative heads percentage stabilize.</p>
+    </section>
+
+    <div class="controls">
+      <div class="slider-group">
+        <label>Tosses per trial: <span id="tossesValue">100</span></label>
+        <input type="range" id="numTosses" min="10" max="10000" value="100" step="10">
+      </div>
+      <div class="slider-group">
+        <label>Coin bias (P of heads): <span id="biasValue">0.50</span></label>
+        <input type="range" id="coinBias" min="0.01" max="0.99" value="0.50" step="0.01">
+      </div>
+    </div>
+
+    <!-- SINGLE TRIAL -->
+    <h2 class="section-title">Single Trial</h2>
+    <p class="section-desc">One experiment — watch the cumulative % heads converge (or not) as tosses accumulate.</p>
+    <div class="metrics">
+      <div class="metric-card"><div class="metric-label">Total Heads</div><div class="metric-value" id="totalHeads">—</div></div>
+      <div class="metric-card"><div class="metric-label">Observed % Heads</div><div class="metric-value" id="pctHeads">—</div></div>
+      <div class="metric-card"><div class="metric-label">True Probability</div><div class="metric-value" id="trueBias">50%</div></div>
+    </div>
+    <div class="chart-actions"><button id="resimulate">Re-simulate</button></div>
+    <div class="chart-wrap">
+      <div id="singleChart"></div>
+      <div class="tooltip-d3" id="singleTooltip"></div>
+    </div>
+
+    <!-- DISTRIBUTION -->
+    <h2 class="section-title">Distribution Across Trials</h2>
+    <p class="section-desc">Each click runs a new trial and adds its observed % heads to the histogram.
+       Watch the distribution tighten around the true probability as you add more trials.</p>
+    <div class="metrics">
+      <div class="metric-card"><div class="metric-label">Trials Run</div><div class="metric-value" id="trialCount">0</div></div>
+      <div class="metric-card"><div class="metric-label">Mean % Heads</div><div class="metric-value" id="trialMean">—</div></div>
+      <div class="metric-card"><div class="metric-label">Std Dev</div><div class="metric-value" id="trialStd">—</div></div>
+    </div>
+    <div class="chart-actions">
+      <button id="drawOne">Draw 1 Sample</button>
+      <button id="drawTen" class="btn-secondary">Draw 10</button>
+      <button id="drawHundred" class="btn-secondary">Draw 100</button>
+      <button id="resetTrials" class="btn-danger">Reset</button>
+    </div>
+    <div class="chart-wrap">
+      <div id="distChart"></div>
+      <div class="tooltip-d3" id="distTooltip"></div>
+    </div>
+    <div id="lastSample" class="last-sample" style="display:none">
+      &#9654; Last sample: <strong id="lastSampleValue"></strong>
+    </div>
+
+    <section class="takeaway">
+      <h3>Why this matters for A/B testing</h3>
+      <p>The single trial chart shows why you shouldn't peek at early results — they're noisy.
+         The distribution chart shows something deeper: even with a fixed sample size, each experiment
+         gives a <em>different</em> answer. The histogram is the <strong>sampling distribution</strong> —
+         the foundation of every p-value and confidence interval you'll ever compute.</p>
+    </section>
+  </div>
+
+  <script>
+    // ===================== STATE =====================
+    let numTosses = 100;
+    let bias = 0.50;
+    let trialResults = [];
+
+    // ===================== SINGLE TRIAL CHART (D3) =====================
+    const sM = { top: 15, right: 30, bottom: 45, left: 55 };
+    const sW = 720, sH = 340;
+    const sw = sW - sM.left - sM.right, sh = sH - sM.top - sM.bottom;
+
+    const sSvg = d3.select('#singleChart').append('svg')
+      .attr('viewBox', `0 0 ${sW} ${sH}`).style('width', '100%');
+    const sG = sSvg.append('g').attr('transform', `translate(${sM.left},${sM.top})`);
+
+    const sx = d3.scaleLinear().range([0, sw]);
+    const sy = d3.scaleLinear().domain([0, 100]).range([sh, 0]);
+
+    const sXAxis = sG.append('g').attr('class', 'axis').attr('transform', `translate(0,${sh})`);
+    const sYAxis = sG.append('g').attr('class', 'axis');
+    const sYGrid = sG.append('g').attr('class', 'grid');
+
+    sG.append('text').attr('class', 'axis-label').attr('x', sw / 2).attr('y', sh + 38).attr('text-anchor', 'middle').text('Toss #');
+    sG.append('text').attr('class', 'axis-label').attr('transform', 'rotate(-90)').attr('x', -sh / 2).attr('y', -42).attr('text-anchor', 'middle').text('% Heads');
+
+    const sLineGen = d3.line().x(d => sx(d.t)).y(d => sy(d.p));
+    const sMainPath = sG.append('path').attr('fill', 'none').attr('stroke', '#4F46E5').attr('stroke-width', 2);
+    const sRefPath = sG.append('path').attr('fill', 'none').attr('stroke', '#EF4444').attr('stroke-width', 2).attr('stroke-dasharray', '8 4');
+
+    // Legend
+    const sLeg = sG.append('g').attr('transform', `translate(${sw - 210}, 10)`).style('font-size', '12px');
+    sLeg.append('line').attr('x1', 0).attr('y1', 7).attr('x2', 20).attr('y2', 7).attr('stroke', '#4F46E5').attr('stroke-width', 2);
+    sLeg.append('text').attr('x', 26).attr('y', 11).text('Cumulative % Heads');
+    sLeg.append('line').attr('x1', 0).attr('y1', 27).attr('x2', 20).attr('y2', 27).attr('stroke', '#EF4444').attr('stroke-width', 2).attr('stroke-dasharray', '8 4');
+    const sRefText = sLeg.append('text').attr('x', 26).attr('y', 31);
+
+    // Hover
+    const sOverlay = sG.append('rect').attr('width', sw).attr('height', sh).attr('fill', 'none').attr('pointer-events', 'all');
+    const sHLine = sG.append('line').attr('stroke', '#9ca3af').attr('stroke-dasharray', '4 3').style('opacity', 0);
+    const sHDot = sG.append('circle').attr('r', 4).attr('fill', '#4F46E5').attr('stroke', '#fff').attr('stroke-width', 2).style('opacity', 0);
+    const sTooltip = document.getElementById('singleTooltip');
+    let singleData = [];
+
+    function simulateSingle() {
+      const n = numTosses, data = [];
+      let cum = 0;
+      for (let i = 0; i < n; i++) { cum += (Math.random() < bias) ? 1 : 0; data.push({ t: i + 1, p: (cum / (i + 1)) * 100 }); }
+      singleData = data;
+      const totalH = cum, pct = (cum / n) * 100;
+
+      document.getElementById('totalHeads').textContent = totalH.toLocaleString();
+      document.getElementById('pctHeads').textContent = pct.toFixed(1) + '%';
+      document.getElementById('trueBias').textContent = (bias * 100).toFixed(0) + '%';
+
+      const t = d3.transition().duration(300);
+      sx.domain([1, n]);
+      sXAxis.transition(t).call(d3.axisBottom(sx).ticks(Math.min(n, 10)).tickFormat(d3.format(',')));
+      sYAxis.transition(t).call(d3.axisLeft(sy).ticks(5).tickFormat(d => d + '%'));
+      sYGrid.transition(t).call(d3.axisLeft(sy).ticks(5).tickSize(-sw).tickFormat(''));
+      sMainPath.datum(data).transition(t).attr('d', sLineGen);
+      sRefPath.datum([{ t: 1, p: bias * 100 }, { t: n, p: bias * 100 }]).transition(t).attr('d', sLineGen);
+      sRefText.text(`True probability (${(bias * 100).toFixed(0)}%)`);
+    }
+
+    sOverlay.on('mousemove', function(event) {
+      if (!singleData.length) return;
+      const [mx] = d3.pointer(event);
+      const idx = Math.max(0, Math.min(Math.round(sx.invert(mx)) - 1, singleData.length - 1));
+      const d = singleData[idx];
+      sHLine.attr('x1', sx(d.t)).attr('x2', sx(d.t)).attr('y1', 0).attr('y2', sh).style('opacity', 1);
+      sHDot.attr('cx', sx(d.t)).attr('cy', sy(d.p)).style('opacity', 1);
+      const wr = document.querySelector('#singleChart').closest('.chart-wrap').getBoundingClientRect();
+      const cr = document.getElementById('singleChart').getBoundingClientRect();
+      sTooltip.style.opacity = '1';
+      sTooltip.innerHTML = `Toss #${d.t.toLocaleString()}<br>% Heads: ${d.p.toFixed(1)}%`;
+      sTooltip.style.left = (cr.left - wr.left + sM.left + sx(d.t) + 12) + 'px';
+      sTooltip.style.top = (cr.top - wr.top + sM.top + sy(d.p) - 30) + 'px';
+    });
+    sOverlay.on('mouseleave', () => { sHLine.style('opacity', 0); sHDot.style('opacity', 0); sTooltip.style.opacity = '0'; });
+
+    // ===================== DISTRIBUTION CHART (D3) =====================
+    const dM = { top: 15, right: 30, bottom: 45, left: 55 };
+    const dW = 720, dH = 340;
+    const dw = dW - dM.left - dM.right, dh = dH - dM.top - dM.bottom;
+
+    const dSvg = d3.select('#distChart').append('svg')
+      .attr('viewBox', `0 0 ${dW} ${dH}`).style('width', '100%');
+    const dG = dSvg.append('g').attr('transform', `translate(${dM.left},${dM.top})`);
+
+    const dx = d3.scaleLinear().domain([0, 100]).range([0, dw]);
+    const dy = d3.scaleLinear().range([dh, 0]);
+
+    const dXAxis = dG.append('g').attr('class', 'axis').attr('transform', `translate(0,${dh})`);
+    const dYAxis = dG.append('g').attr('class', 'axis');
+    const dYGrid = dG.append('g').attr('class', 'grid');
+
+    dG.append('text').attr('class', 'axis-label').attr('x', dw / 2).attr('y', dh + 38).attr('text-anchor', 'middle').text('% Heads');
+    dG.append('text').attr('class', 'axis-label').attr('transform', 'rotate(-90)').attr('x', -dh / 2).attr('y', -42).attr('text-anchor', 'middle').text('Count');
+
+    const barsG = dG.append('g');
+    const refLineD = dG.append('line').attr('stroke', '#EF4444').attr('stroke-width', 2).attr('stroke-dasharray', '8 4');
+    const meanLineD = dG.append('line').attr('stroke', '#10B981').attr('stroke-width', 2).attr('stroke-dasharray', '4 3');
+    const refLabelD = dG.append('text').attr('fill', '#EF4444').attr('font-size', 12).attr('text-anchor', 'middle');
+    const meanLabelD = dG.append('text').attr('fill', '#10B981').attr('font-size', 12).attr('text-anchor', 'middle');
+
+    const dTooltip = document.getElementById('distTooltip');
+
+    const BIN_W = 2;
+    const NUM_BINS = 50;
+
+    function runOneTrial() {
+      let heads = 0;
+      for (let i = 0; i < numTosses; i++) if (Math.random() < bias) heads++;
+      return (heads / numTosses) * 100;
+    }
+
+    function updateDistChart() {
+      const biasPct = bias * 100;
+      const count = trialResults.length;
+
+      document.getElementById('trialCount').textContent = count.toLocaleString();
+
+      // Bin the data
+      const bins = new Array(NUM_BINS).fill(0);
+      trialResults.forEach(v => { bins[Math.min(Math.floor(v / BIN_W), NUM_BINS - 1)]++; });
+      const maxCount = d3.max(bins) || 1;
+
+      // Compute stats
+      let m = 0, s = 0;
+      if (count > 0) {
+        m = trialResults.reduce((a, b) => a + b, 0) / count;
+        s = Math.sqrt(trialResults.reduce((a, b) => a + (b - m) ** 2, 0) / count);
+      }
+      document.getElementById('trialMean').textContent = count ? m.toFixed(1) + '%' : '—';
+      document.getElementById('trialStd').textContent = count ? s.toFixed(2) + '%' : '—';
+
+      // Last sample indicator
+      if (count > 0) {
+        document.getElementById('lastSampleValue').textContent = trialResults[count - 1].toFixed(1) + '%';
+        document.getElementById('lastSample').style.display = 'inline-block';
+      } else {
+        document.getElementById('lastSample').style.display = 'none';
+      }
+
+      // Scales
+      dy.domain([0, Math.max(maxCount, 1)]);
+      const t = d3.transition().duration(200);
+
+      dXAxis.transition(t).call(d3.axisBottom(dx).ticks(10).tickFormat(d => d + '%'));
+      dYAxis.transition(t).call(d3.axisLeft(dy).ticks(5));
+      dYGrid.transition(t).call(d3.axisLeft(dy).ticks(5).tickSize(-dw).tickFormat(''));
+
+      // Determine last sample bin for highlight
+      const lastBin = count > 0 ? Math.min(Math.floor(trialResults[count - 1] / BIN_W), NUM_BINS - 1) : -1;
+
+      // Data join for bars
+      const barData = bins.map((c, i) => ({ idx: i, count: c, center: i * BIN_W + BIN_W / 2 }));
+      const bars = barsG.selectAll('rect').data(barData, d => d.idx);
+
+      bars.enter()
+        .append('rect')
+        .attr('x', d => dx(d.idx * BIN_W) + 1)
+        .attr('width', Math.max(dx(BIN_W) - dx(0) - 2, 1))
+        .attr('y', dh)
+        .attr('height', 0)
+        .attr('rx', 1)
+        .on('mousemove', function(event, d) {
+          const wr = document.querySelector('#distChart').closest('.chart-wrap').getBoundingClientRect();
+          const cr = document.getElementById('distChart').getBoundingClientRect();
+          dTooltip.style.opacity = '1';
+          dTooltip.innerHTML = `${d.idx * BIN_W}–${(d.idx + 1) * BIN_W}% heads<br>Count: ${d.count}`;
+          dTooltip.style.left = (cr.left - wr.left + dM.left + dx(d.center) + 12) + 'px';
+          dTooltip.style.top = (cr.top - wr.top + dM.top + dy(d.count) - 30) + 'px';
+        })
+        .on('mouseleave', () => { dTooltip.style.opacity = '0'; })
+        .merge(bars)
+        .transition(t)
+        .attr('x', d => dx(d.idx * BIN_W) + 1)
+        .attr('width', Math.max(dx(BIN_W) - dx(0) - 2, 1))
+        .attr('y', d => dy(d.count))
+        .attr('height', d => dh - dy(d.count))
+        .attr('fill', d => d.idx === lastBin ? '#818CF8' : '#4F46E5')
+        .attr('stroke', '#3730A3')
+        .attr('stroke-width', 0.5);
+
+      bars.exit().remove();
+
+      // Reference lines
+      refLineD.attr('x1', dx(biasPct)).attr('x2', dx(biasPct)).attr('y1', 0).attr('y2', dh);
+      refLabelD.attr('x', dx(biasPct)).attr('y', -4).text(`True: ${biasPct.toFixed(0)}%`);
+
+      if (count > 0) {
+        meanLineD.attr('x1', dx(m)).attr('x2', dx(m)).attr('y1', 0).attr('y2', dh).style('opacity', 1);
+        meanLabelD.attr('x', dx(m)).attr('y', 12).text(`Mean: ${m.toFixed(1)}%`).style('opacity', 1);
+      } else {
+        meanLineD.style('opacity', 0);
+        meanLabelD.style('opacity', 0);
+      }
+    }
+
+    function drawSamples(count) {
+      for (let i = 0; i < count; i++) trialResults.push(runOneTrial());
+      updateDistChart();
+    }
+
+    function resetTrials() {
+      trialResults = [];
+      updateDistChart();
+    }
+
+    // ===================== EVENT LISTENERS =====================
+    const tossesSlider = document.getElementById('numTosses');
+    const biasSlider = document.getElementById('coinBias');
+
+    tossesSlider.addEventListener('input', () => {
+      numTosses = parseInt(tossesSlider.value);
+      document.getElementById('tossesValue').textContent = numTosses.toLocaleString();
+      simulateSingle();
+      resetTrials();
+    });
+
+    biasSlider.addEventListener('input', () => {
+      bias = parseFloat(biasSlider.value);
+      document.getElementById('biasValue').textContent = bias.toFixed(2);
+      simulateSingle();
+      resetTrials();
+    });
+
+    document.getElementById('resimulate').addEventListener('click', simulateSingle);
+    document.getElementById('drawOne').addEventListener('click', () => drawSamples(1));
+    document.getElementById('drawTen').addEventListener('click', () => drawSamples(10));
+    document.getElementById('drawHundred').addEventListener('click', () => drawSamples(100));
+    document.getElementById('resetTrials').addEventListener('click', resetTrials);
+
+    // Hold-to-repeat on Draw 1
+    let holdInterval = null;
+    const drawOneBtn = document.getElementById('drawOne');
+    drawOneBtn.addEventListener('mousedown', () => { drawSamples(1); holdInterval = setInterval(() => drawSamples(1), 120); });
+    drawOneBtn.addEventListener('mouseup', () => clearInterval(holdInterval));
+    drawOneBtn.addEventListener('mouseleave', () => clearInterval(holdInterval));
+
+    // Initial render
+    simulateSingle();
+    updateDistChart();
+  </script>
+</body>
+</html>
