@@ -8,6 +8,8 @@
 const MODULES = [
   { id: 'law-of-large-numbers', title: 'Law of Large Numbers', path: 'modules/law-of-large-numbers.html' },
   { id: 'hypothesis-testing', title: 'Hypothesis Testing', path: 'modules/hypothesis-testing.html' },
+  { id: 'risk-reward-simulations', title: 'Risk & Reward', path: 'modules/risk-reward-simulations.html' },
+  { id: 'observed-vs-true-lift', title: 'Observed vs True Lift', path: 'modules/observed-vs-true-lift.html' },
 ];
 
 function renderNav(currentModuleId) {

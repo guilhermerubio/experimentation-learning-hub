@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Observed vs True Lift — Exp Learning Hub</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <link rel="stylesheet" href="../style.css">
+  <script src="../js/nav.js"></script>
+  <script src="../js/chart-utils.js"></script>
+</head>
+<body>
+  <script>renderNav('observed-vs-true-lift');</script>
+
+  <div class="container">
+    <header>
+      <h1>Observed vs True Lift</h1>
+      <p class="subtitle">Your experiment result is not the truth &mdash; it's one noisy photograph of it</p>
+    </header>
+
+    <section class="explainer">
+      <p>Every A/B test draws a <strong>random sample</strong> from two populations: control users and variant users.
+         The observed conversion rates fluctuate around the true rates, and the observed lift fluctuates
+         around the true lift.</p>
+      <p>Below, the two bell curves show the <strong>sampling distributions</strong> &mdash; the range of
+         conversion rates you'd see across many experiments with this sample size. Each experiment draws
+         one point from each curve.</p>
+      <p class="highlight">Set your experiment parameters, then run experiments one at a time. Watch how
+         the observed lifts scatter around the truth and accumulate into a distribution.</p>
+    </section>
+
+    <!-- Experiment Design Controls -->
+    <h2 class="section-title">Experiment Design</h2>
+    <div class="controls">
+      <div class="slider-group">
+        <label>Baseline CVR: <span id="cvrVal">2.0%</span></label>
+        <input type="range" id="cvrSlider" min="0.5" max="20" value="2.0" step="0.1">
+      </div>
+      <div class="slider-group">
+        <label>Daily Traffic: <span id="trafficVal">100,000</span></label>
+        <input type="range" id="trafficSlider" min="5000" max="500000" value="100000" step="5000">
+      </div>
+      <div class="slider-group">
+        <label>MDE: <span id="mdeVal">5.0%</span></label>
+        <input type="range" id="mdeSlider" min="1" max="50" value="5" step="0.5">
+      </div>
+    </div>
+    <div class="controls">
+      <div class="slider-group">
+        <label>Alpha (&alpha;): <span id="alphaVal">0.05</span></label>
+        <input type="range" id="alphaSlider" min="0.01" max="0.20" value="0.05" step="0.01">
+      </div>
+      <div class="slider-group">
+        <label>Power (1 &minus; &beta;): <span id="powerVal">0.80</span></label>
+        <input type="range" id="powerSlider" min="0.50" max="0.99" value="0.80" step="0.01">
+      </div>
+      <div class="slider-group">
+        <label>True Lift: <span id="liftVal">5.0%</span></label>
+        <input type="range" id="liftSlider" min="-10" max="30" value="5" step="0.5">
+      </div>
+    </div>
+
+    <!-- Derived Metrics -->
+    <div class="metrics">
+      <div class="metric-card">
+        <div class="metric-label">Sample Size / Variant</div>
+        <div class="metric-value" id="sampleSizeVal">&mdash;</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Runtime (Days)</div>
+        <div class="metric-value" id="runtimeVal">&mdash;</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Variant True CVR</div>
+        <div class="metric-value" id="variantCVRVal">&mdash;</div>
+      </div>
+    </div>
+
+    <!-- Sampling Distributions -->
+    <h2 class="section-title">Sampling Distributions</h2>
+    <p class="section-desc">
+      <span style="color:#4F46E5; font-weight:600;">&marker; Control</span> &nbsp;
+      <span style="color:#10B981; font-weight:600;">&marker; Variant</span> &mdash;
+      each experiment draws one sample from each curve.
+    </p>
+    <div class="chart-wrap" id="samplingWrap">
+      <div id="samplingChart"></div>
+    </div>
+
+    <!-- Last Experiment Info -->
+    <div id="lastExpInfo" class="last-sample" style="display:none;">
+      &#9654; Last: Control <strong id="lastCtrl"></strong>, Variant <strong id="lastVar"></strong>,
+      Lift <strong id="lastLift"></strong>
+      <span id="lastSig"></span>
+    </div>
+
+    <!-- Buttons -->
+    <div class="chart-actions">
+      <button id="runOne">Run 1 Experiment</button>
+      <button id="runTen" class="btn-secondary">Run 10</button>
+      <button id="runHundred" class="btn-secondary">Run 100</button>
+      <button id="runThousand" class="btn-secondary">Run 1,000</button>
+      <button id="resetBtn" class="btn-danger">Reset</button>
+    </div>
+
+    <!-- Observed Lift Distribution -->
+    <h2 class="section-title">Observed Lift Distribution</h2>
+    <p class="section-desc">Each experiment produces an observed lift. The dashed line marks the <strong>true lift</strong>.</p>
+
+    <div class="metrics" style="grid-template-columns: repeat(4, 1fr);">
+      <div class="metric-card">
+        <div class="metric-label">Experiments</div>
+        <div class="metric-value" id="expCountVal">0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Significant</div>
+        <div class="metric-value" id="sigCountVal">&mdash;</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Sig Rate</div>
+        <div class="metric-value" id="sigRateVal">&mdash;</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Mean Obs. Lift</div>
+        <div class="metric-value" id="meanLiftVal">&mdash;</div>
+      </div>
+    </div>
+
+    <div class="chart-wrap" id="liftWrap">
+      <div id="liftChart"></div>
+      <div class="tooltip-d3" id="liftTooltip"></div>
+    </div>
+
+    <!-- Guided Exploration -->
+    <section class="explainer" style="border-left-color: #10B981;">
+      <h3 style="margin-bottom: 0.5rem; font-size: 1rem;">Try these scenarios</h3>
+      <ol style="margin-left: 1.25rem; font-size: 0.95rem;">
+        <li style="margin-bottom: 0.5rem;"><strong>Properly powered:</strong> Set true lift = MDE (both 5%). Run 1,000 experiments. The sig rate should be close to your power setting.</li>
+        <li style="margin-bottom: 0.5rem;"><strong>False positives:</strong> Set true lift to 0%. Run 1,000 experiments. About &alpha;% are significant &mdash; these are all false positives.</li>
+        <li style="margin-bottom: 0.5rem;"><strong>Winner's curse preview:</strong> Set true lift to 1% with MDE at 5%. The few significant results show inflated observed lifts.</li>
+        <li><strong>Exaggeration gap:</strong> Compare the true lift line to the mean observed lift. When do they diverge?</li>
+      </ol>
+    </section>
+
+    <section class="takeaway">
+      <h3>Key Takeaways</h3>
+      <p>A single experiment result is one noisy draw from a distribution. The <strong>sampling distributions</strong>
+         show the range of possible outcomes &mdash; wider distributions (from smaller samples) mean more variable results.
+         When you ship based on a single significant result, you're acting on one photograph, not the full album.
+         Properly powering your experiment narrows the distributions and brings observed lifts closer to truth.</p>
+    </section>
+  </div>
+
+  <script>
+    // ===== MATH UTILITIES =====
+
+    function normalCDF(z) {
+      const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741,
+            a4 = -1.453152027, a5 = 1.061405429, p = 0.3275911;
+      const sign = z < 0 ? -1 : 1;
+      z = Math.abs(z);
+      const t = 1.0 / (1.0 + p * z);
+      const y = 1 - (((((a5*t + a4)*t) + a3)*t + a2)*t + a1) * t * Math.exp(-z*z/2);
+      return 0.5 * (1 + sign * y);
+    }
+
+    function normalPPF(p) {
+      if (p <= 0) return -Infinity;
+      if (p >= 1) return Infinity;
+      if (p < 0.5) return -normalPPF(1 - p);
+      const a = [-3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02,
+                  1.383577518672690e+02, -3.066479806614716e+01, 2.506628277459239e+00];
+      const b = [-5.447609879822406e+01, 1.615858368580409e+02, -1.556989798598866e+02,
+                  6.680131188771972e+01, -1.328068155288572e+01];
+      const c = [-7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e+00,
+                  -2.549732539343734e+00, 4.374664141464968e+00, 2.938163982698783e+00];
+      const d = [7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e+00,
+                  3.754408661907416e+00];
+      const pLow = 0.02425;
+      if (p < pLow) {
+        const q = Math.sqrt(-2 * Math.log(p));
+        return (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) /
+               ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);
+      }
+      const q = p - 0.5, r = q * q;
+      return (((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5]) * q /
+             (((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1);
+    }
+
+    function normalPDF(x, mu, sigma) {
+      const z = (x - mu) / sigma;
+      return Math.exp(-0.5 * z * z) / (sigma * Math.sqrt(2 * Math.PI));
+    }
+
+    function randn() {
+      let u1;
+      do { u1 = Math.random(); } while (u1 === 0);
+      return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * Math.random());
+    }
+
+    // ===== STATE =====
+
+    let baselineCVR = 0.02, dailyTraffic = 100000;
+    let alphaLevel = 0.05, powerLevel = 0.80;
+    let mdePercent = 5.0, trueLiftPercent = 5.0;
+    let exps = [];
+    let animating = false;
+
+    // ===== DERIVED =====
+
+    function pVariant() { return baselineCVR * (1 + trueLiftPercent / 100); }
+
+    function calcSampleSize() {
+      const zA = normalPPF(1 - alphaLevel / 2);
+      const zB = normalPPF(powerLevel);
+      const p1 = baselineCVR;
+      const p2 = baselineCVR * (1 + mdePercent / 100);
+      const delta = Math.abs(p2 - p1);
+      if (delta === 0) return Infinity;
+      const pooledVar = p1*(1-p1) + p2*(1-p2);
+      return Math.ceil(((zA + zB)**2 * pooledVar) / (delta**2));
+    }
+
+    function calcRuntime() {
+      const n = calcSampleSize();
+      return isFinite(n) ? Math.ceil(2 * n / dailyTraffic) : Infinity;
+    }
+
+    // ===== SIMULATION =====
+
+    function runOneExperiment() {
+      const n = calcSampleSize();
+      if (!isFinite(n) || n <= 0) return null;
+      const pC = baselineCVR, pV = pVariant();
+      const seC = Math.sqrt(pC * (1 - pC) / n);
+      const seV = Math.sqrt(Math.max(pV * (1 - pV), 0) / n);
+
+      const rateA = pC + seC * randn();
+      const rateB = pV + seV * randn();
+      const obsLift = rateA > 0 ? (rateB / rateA) - 1 : 0;
+
+      // Proportions z-test
+      const pPool = (rateA + rateB) / 2;
+      const se = Math.sqrt(Math.max(pPool * (1 - pPool) * 2 / n, 1e-20));
+      const z = se > 0 ? (rateB - rateA) / se : 0;
+      const pVal = 2 * (1 - normalCDF(Math.abs(z)));
+      return { rateA, rateB, obsLift, significant: pVal < alphaLevel, pVal };
+    }
+
+    // ===== CHART: Sampling Distributions =====
+
+    const sc = createChart('#samplingChart', { height: 300 });
+    addAxisLabels(sc, 'Conversion Rate', '');
+
+    const controlAreaGen = d3.area()
+      .x(d => sc.x(d.x)).y0(sc.height).y1(d => sc.y(d.y)).curve(d3.curveBasis);
+    const variantAreaGen = d3.area()
+      .x(d => sc.x(d.x)).y0(sc.height).y1(d => sc.y(d.y)).curve(d3.curveBasis);
+
+    const controlPath = sc.g.append('path')
+      .attr('fill', '#4F46E5').attr('opacity', 0.25).attr('stroke', '#4F46E5').attr('stroke-width', 2);
+    const variantPath = sc.g.append('path')
+      .attr('fill', '#10B981').attr('opacity', 0.25).attr('stroke', '#10B981').attr('stroke-width', 2);
+
+    // Mean reference lines
+    const controlMean = sc.g.append('line')
+      .attr('stroke', '#4F46E5').attr('stroke-width', 1.5).attr('stroke-dasharray', '4 3');
+    const variantMean = sc.g.append('line')
+      .attr('stroke', '#10B981').attr('stroke-width', 1.5).attr('stroke-dasharray', '4 3');
+
+    // Sample dots & drop lines (drawn on top)
+    const controlDrop = sc.g.append('line')
+      .attr('stroke', '#4F46E5').attr('stroke-width', 1.5).attr('stroke-dasharray', '3 3').style('opacity', 0);
+    const variantDrop = sc.g.append('line')
+      .attr('stroke', '#10B981').attr('stroke-width', 1.5).attr('stroke-dasharray', '3 3').style('opacity', 0);
+    const controlDot = sc.g.append('circle')
+      .attr('r', 6).attr('fill', '#4F46E5').attr('stroke', '#fff').attr('stroke-width', 2).style('opacity', 0);
+    const variantDot = sc.g.append('circle')
+      .attr('r', 6).attr('fill', '#10B981').attr('stroke', '#fff').attr('stroke-width', 2).style('opacity', 0);
+
+    // ===== CHART: Lift Histogram =====
+
+    const lc = createChart('#liftChart', { height: 300 });
+    addAxisLabels(lc, 'Observed Lift', 'Count');
+
+    const lBarsG = lc.g.append('g');
+    const trueLiftLine = lc.g.append('line')
+      .attr('stroke', '#10B981').attr('stroke-width', 2).attr('stroke-dasharray', '6 4');
+    const trueLiftLabel = lc.g.append('text')
+      .attr('fill', '#10B981').attr('font-size', 11).attr('font-weight', 600);
+    const zeroLine = lc.g.append('line')
+      .attr('stroke', '#9ca3af').attr('stroke-width', 1.5).attr('stroke-dasharray', '4 3');
+    const zeroLabel = lc.g.append('text')
+      .attr('fill', '#9ca3af').attr('font-size', 11);
+    const lTooltip = document.getElementById('liftTooltip');
+
+    // ===== UPDATE FUNCTIONS =====
+
+    function updateDerivedMetrics() {
+      const n = calcSampleSize(), rt = calcRuntime(), pV = pVariant();
+      document.getElementById('sampleSizeVal').textContent = isFinite(n) ? n.toLocaleString() : '\u221E';
+      document.getElementById('runtimeVal').textContent = isFinite(rt) ? rt.toLocaleString() : '\u221E';
+      document.getElementById('variantCVRVal').textContent = (pV * 100).toFixed(2) + '%';
+    }
+
+    function makeCurve(mu, sigma) {
+      const pts = [];
+      const lo = mu - 4*sigma, hi = mu + 4*sigma, step = (hi - lo) / 200;
+      for (let x = lo; x <= hi; x += step) pts.push({ x, y: normalPDF(x, mu, sigma) });
+      return pts;
+    }
+
+    function updateSamplingChart() {
+      const n = calcSampleSize();
+      if (!isFinite(n) || n <= 0) return;
+      const pC = baselineCVR, pV = pVariant();
+      const seC = Math.sqrt(pC*(1-pC)/n);
+      const seV = Math.sqrt(Math.max(pV*(1-pV), 0)/n);
+
+      const xMin = Math.min(pC - 4*seC, pV - 4*seV);
+      const xMax = Math.max(pC + 4*seC, pV + 4*seV);
+      const yMax = Math.max(normalPDF(pC,pC,seC), normalPDF(pV,pV,seV)) * 1.15;
+
+      updateAxes(sc, [xMin, xMax], [0, yMax], { xFormat: d3.format('.2%'), yTicks: 0 });
+      sc.yAxisG.selectAll('.tick').remove();
+      sc.yGridG.selectAll('.tick').remove();
+
+      const t = d3.transition().duration(300);
+      controlPath.transition(t).attr('d', controlAreaGen(makeCurve(pC, seC)));
+      variantPath.transition(t).attr('d', variantAreaGen(makeCurve(pV, seV)));
+
+      controlMean.transition(t).attr('x1', sc.x(pC)).attr('x2', sc.x(pC)).attr('y1', 0).attr('y2', sc.height);
+      variantMean.transition(t).attr('x1', sc.x(pV)).attr('x2', sc.x(pV)).attr('y1', 0).attr('y2', sc.height);
+    }
+
+    function showDots(result) {
+      if (!result) return;
+      const n = calcSampleSize(), pC = baselineCVR, pV = pVariant();
+      const seC = Math.sqrt(pC*(1-pC)/n);
+      const seV = Math.sqrt(Math.max(pV*(1-pV),0)/n);
+      const yA = normalPDF(result.rateA, pC, seC);
+      const yB = normalPDF(result.rateB, pV, seV);
+
+      controlDot.attr('cx', sc.x(result.rateA)).attr('cy', sc.y(yA)).style('opacity', 1);
+      variantDot.attr('cx', sc.x(result.rateB)).attr('cy', sc.y(yB)).style('opacity', 1);
+      controlDrop.attr('x1', sc.x(result.rateA)).attr('x2', sc.x(result.rateA))
+        .attr('y1', sc.y(yA)).attr('y2', sc.height).style('opacity', 0.7);
+      variantDrop.attr('x1', sc.x(result.rateB)).attr('x2', sc.x(result.rateB))
+        .attr('y1', sc.y(yB)).attr('y2', sc.height).style('opacity', 0.7);
+    }
+
+    function hideDots() {
+      controlDot.style('opacity', 0); variantDot.style('opacity', 0);
+      controlDrop.style('opacity', 0); variantDrop.style('opacity', 0);
+    }
+
+    function updateLastExp(r) {
+      if (!r) return;
+      document.getElementById('lastExpInfo').style.display = 'inline-block';
+      document.getElementById('lastCtrl').textContent = (r.rateA * 100).toFixed(2) + '%';
+      document.getElementById('lastVar').textContent = (r.rateB * 100).toFixed(2) + '%';
+      document.getElementById('lastLift').textContent =
+        (r.obsLift >= 0 ? '+' : '') + (r.obsLift * 100).toFixed(2) + '%';
+      const s = document.getElementById('lastSig');
+      s.textContent = r.significant ? '(significant)' : '(not significant)';
+      s.style.color = r.significant ? '#059669' : '#6b7280';
+    }
+
+    function updateExpMetrics() {
+      const n = exps.length;
+      document.getElementById('expCountVal').textContent = n.toLocaleString();
+      if (n === 0) {
+        ['sigCountVal','sigRateVal','meanLiftVal'].forEach(id =>
+          document.getElementById(id).textContent = '\u2014');
+        return;
+      }
+      const sig = exps.filter(e => e.significant).length;
+      const mean = exps.reduce((s,e) => s + e.obsLift, 0) / n;
+      document.getElementById('sigCountVal').textContent = sig.toLocaleString();
+      document.getElementById('sigRateVal').textContent = (sig/n*100).toFixed(1) + '%';
+      document.getElementById('meanLiftVal').textContent =
+        (mean >= 0 ? '+' : '') + (mean*100).toFixed(2) + '%';
+    }
+
+    function liftRange() {
+      const n = calcSampleSize();
+      if (!isFinite(n)) return [-0.1, 0.1];
+      const pC = baselineCVR, pV = pVariant();
+      const seC = Math.sqrt(pC*(1-pC)/n), seV = Math.sqrt(Math.max(pV*(1-pV),0)/n);
+      const seLift = Math.sqrt(seC*seC + seV*seV) / Math.max(pC, 0.001);
+      const tl = trueLiftPercent / 100;
+      return [tl - 4*seLift, tl + 4*seLift];
+    }
+
+    function updateLiftChart() {
+      const tl = trueLiftPercent / 100;
+      const count = exps.length;
+
+      if (count === 0) {
+        lBarsG.selectAll('rect').data([]).exit().remove();
+        const [lo, hi] = liftRange();
+        updateAxes(lc, [lo, hi], [0, 1], { xFormat: d3.format('.1%'), yTicks: 3 });
+        drawRefLines(lo, hi, tl);
+        return;
+      }
+
+      const lifts = exps.map(e => e.obsLift);
+      const ext = d3.extent(lifts);
+      const pad = Math.max((ext[1] - ext[0]) * 0.1, 0.005);
+      const lo = Math.min(ext[0] - pad, tl - pad);
+      const hi = Math.max(ext[1] + pad, tl + pad);
+
+      const bins = d3.bin().domain([lo, hi]).thresholds(30)(lifts);
+      const maxC = d3.max(bins, b => b.length) || 1;
+
+      updateAxes(lc, [lo, hi], [0, maxC * 1.1], { xFormat: d3.format('.1%'), yTicks: 5 });
+
+      // Find bin of last experiment
+      const lastL = exps[count-1].obsLift;
+      let lastIdx = -1;
+      bins.forEach((b,i) => { if (lastL >= b.x0 && lastL < b.x1) lastIdx = i; });
+
+      const t = d3.transition().duration(200);
+      const bars = lBarsG.selectAll('rect').data(bins, (d,i) => i);
+
+      bars.enter().append('rect')
+        .attr('rx', 1)
+        .attr('y', lc.height).attr('height', 0)
+        .on('mousemove', function(event, d) {
+          const wr = document.getElementById('liftWrap').getBoundingClientRect();
+          const cr = document.getElementById('liftChart').getBoundingClientRect();
+          lTooltip.style.opacity = '1';
+          lTooltip.innerHTML = `Lift: ${d3.format('.1%')(d.x0)} \u2013 ${d3.format('.1%')(d.x1)}<br>Count: ${d.length}`;
+          const cx = (lc.x(d.x0) + lc.x(d.x1)) / 2;
+          lTooltip.style.left = (cr.left - wr.left + lc.margin.left + cx + 12) + 'px';
+          lTooltip.style.top = (cr.top - wr.top + lc.margin.top + lc.y(d.length) - 30) + 'px';
+        })
+        .on('mouseleave', () => lTooltip.style.opacity = '0')
+      .merge(bars).transition(t)
+        .attr('x', d => lc.x(d.x0) + 1)
+        .attr('width', d => Math.max(lc.x(d.x1) - lc.x(d.x0) - 2, 1))
+        .attr('y', d => lc.y(d.length))
+        .attr('height', d => lc.height - lc.y(d.length))
+        .attr('fill', (d,i) => i === lastIdx ? '#818CF8' : '#4F46E5')
+        .attr('stroke', '#3730A3').attr('stroke-width', 0.5);
+
+      bars.exit().transition(t).attr('height', 0).attr('y', lc.height).remove();
+
+      drawRefLines(lo, hi, tl);
+    }
+
+    function drawRefLines(lo, hi, tl) {
+      // True lift line
+      trueLiftLine.attr('x1', lc.x(tl)).attr('x2', lc.x(tl)).attr('y1', 0).attr('y2', lc.height);
+      trueLiftLabel.attr('x', lc.x(tl) + 4).attr('y', 12).attr('text-anchor', 'start')
+        .text('True: ' + (tl*100).toFixed(1) + '%');
+
+      // Zero line (hide if true lift is near 0 or 0 is out of range)
+      const zx = lc.x(0);
+      if (Math.abs(tl) > 0.002 && zx >= 0 && zx <= lc.width) {
+        zeroLine.attr('x1', zx).attr('x2', zx).attr('y1', 0).attr('y2', lc.height).style('opacity', 1);
+        zeroLabel.attr('x', zx + 4).attr('y', 24).text('0%').style('opacity', 1);
+      } else {
+        zeroLine.style('opacity', 0);
+        zeroLabel.style('opacity', 0);
+      }
+    }
+
+    // ===== RUN EXPERIMENTS =====
+
+    function runAnimated() {
+      if (animating) return;
+      animating = true;
+      const result = runOneExperiment();
+      if (!result) { animating = false; return; }
+
+      hideDots();
+      const n = calcSampleSize(), pC = baselineCVR, pV = pVariant();
+      const seC = Math.sqrt(pC*(1-pC)/n);
+      const seV = Math.sqrt(Math.max(pV*(1-pV),0)/n);
+      const yA = normalPDF(result.rateA, pC, seC);
+      const yB = normalPDF(result.rateB, pV, seV);
+
+      // Step 1: control dot
+      controlDot.attr('cx', sc.x(result.rateA)).attr('cy', sc.y(yA));
+      controlDrop.attr('x1', sc.x(result.rateA)).attr('x2', sc.x(result.rateA))
+        .attr('y1', sc.y(yA)).attr('y2', sc.height);
+      controlDot.style('opacity', 0).transition().duration(150).style('opacity', 1);
+      controlDrop.style('opacity', 0).transition().duration(150).style('opacity', 0.7);
+
+      // Step 2: variant dot
+      setTimeout(() => {
+        variantDot.attr('cx', sc.x(result.rateB)).attr('cy', sc.y(yB));
+        variantDrop.attr('x1', sc.x(result.rateB)).attr('x2', sc.x(result.rateB))
+          .attr('y1', sc.y(yB)).attr('y2', sc.height);
+        variantDot.style('opacity', 0).transition().duration(150).style('opacity', 1);
+        variantDrop.style('opacity', 0).transition().duration(150).style('opacity', 0.7);
+      }, 200);
+
+      // Step 3: record + update histogram
+      setTimeout(() => {
+        exps.push(result);
+        updateLastExp(result);
+        updateExpMetrics();
+        updateLiftChart();
+        animating = false;
+      }, 450);
+    }
+
+    function runBatch(count) {
+      for (let i = 0; i < count; i++) {
+        const r = runOneExperiment();
+        if (r) exps.push(r);
+      }
+      if (exps.length > 0) {
+        showDots(exps[exps.length - 1]);
+        updateLastExp(exps[exps.length - 1]);
+      }
+      updateExpMetrics();
+      updateLiftChart();
+    }
+
+    function resetAll() {
+      exps = [];
+      hideDots();
+      document.getElementById('lastExpInfo').style.display = 'none';
+      updateExpMetrics();
+      updateLiftChart();
+    }
+
+    // ===== WIRING =====
+
+    function onParamChange() {
+      resetAll();
+      updateDerivedMetrics();
+      updateSamplingChart();
+      updateLiftChart();
+    }
+
+    const sl = {
+      cvr: document.getElementById('cvrSlider'),
+      traffic: document.getElementById('trafficSlider'),
+      mde: document.getElementById('mdeSlider'),
+      alpha: document.getElementById('alphaSlider'),
+      power: document.getElementById('powerSlider'),
+      lift: document.getElementById('liftSlider'),
+    };
+
+    sl.cvr.addEventListener('input', () => {
+      baselineCVR = parseFloat(sl.cvr.value) / 100;
+      document.getElementById('cvrVal').textContent = parseFloat(sl.cvr.value).toFixed(1) + '%';
+      onParamChange();
+    });
+    sl.traffic.addEventListener('input', () => {
+      dailyTraffic = parseInt(sl.traffic.value);
+      document.getElementById('trafficVal').textContent = dailyTraffic.toLocaleString();
+      onParamChange();
+    });
+    sl.mde.addEventListener('input', () => {
+      mdePercent = parseFloat(sl.mde.value);
+      document.getElementById('mdeVal').textContent = mdePercent.toFixed(1) + '%';
+      onParamChange();
+    });
+    sl.alpha.addEventListener('input', () => {
+      alphaLevel = parseFloat(sl.alpha.value);
+      document.getElementById('alphaVal').textContent = alphaLevel.toFixed(2);
+      onParamChange();
+    });
+    sl.power.addEventListener('input', () => {
+      powerLevel = parseFloat(sl.power.value);
+      document.getElementById('powerVal').textContent = powerLevel.toFixed(2);
+      onParamChange();
+    });
+    sl.lift.addEventListener('input', () => {
+      trueLiftPercent = parseFloat(sl.lift.value);
+      document.getElementById('liftVal').textContent = trueLiftPercent.toFixed(1) + '%';
+      onParamChange();
+    });
+
+    document.getElementById('runOne').addEventListener('click', runAnimated);
+    document.getElementById('runTen').addEventListener('click', () => runBatch(10));
+    document.getElementById('runHundred').addEventListener('click', () => runBatch(100));
+    document.getElementById('runThousand').addEventListener('click', () => runBatch(1000));
+    document.getElementById('resetBtn').addEventListener('click', resetAll);
+
+    // Initial render
+    updateDerivedMetrics();
+    updateSamplingChart();
+    updateLiftChart();
+  </script>
+</body>
+</html>

@@ -130,6 +130,69 @@ These modules apply the foundations to real experimentation scenarios.
 - **Key terms introduced:** Monte Carlo simulation, distribution of outcomes, observed power
 - **Source material:** `ab_simulations_app.py`
 
+#### Module 6b: Observed vs True Lift
+
+> *"Your experiment result is not the truth — it's one noisy photograph of it"*
+
+- **Key insight:** The control and variant conversion rates each have a sampling distribution — a bell curve of possible observed values centered on the true rate. Each experiment draws one sample from each curve, and the observed lift is the noisy difference between those two draws. By watching individual experiments sample from the truth and accumulate into a distribution of observed lifts, you build visceral intuition for why single experiment results are unreliable and how sample size controls the noise.
+- **Intuition builder:** "Imagine two bowls of marbles — the control bowl and the variant bowl. Each has a slightly different mix of colors. You grab a handful from each and compare. Sometimes the handful makes the difference look huge; sometimes it hides it completely. The handful is your sample. The mix in the bowl is the truth."
+- **Key terms introduced:** Sampling distribution, standard error, observed lift variability, effect estimation noise
+- **Source material:** `ab_simulations_app.py`, `fpr_fnr_app.py`
+
+##### Implementation Plan
+
+**Core interactive flow (3 panels):**
+
+1. **Experiment Design Panel** — User inputs parameters via sliders:
+   - Baseline CVR (%), daily traffic, alpha, power (1 − β), MDE (%)
+   - True lift (%) — the actual effect being simulated (can differ from MDE)
+   - Derived metrics shown as cards: sample size per variant, runtime (days), control CVR, variant CVR (true)
+   - Changing any parameter instantly redraws the distributions and resets experiments
+
+2. **Sampling Distributions Chart** (D3 area chart) — Two overlapping normal bell curves:
+   - Control: N(p_control, SE_control) where SE = sqrt(p × (1−p) / n)
+   - Variant: N(p_variant, SE_variant) where p_variant = p_control × (1 + true_lift)
+   - X-axis: conversion rate. Color: indigo (control), green (variant)
+   - When "Run 1 Experiment" is clicked, animated dots appear on each curve at the sampled rates, with an annotation showing the observed lift between them
+   - Dots persist briefly, then fade, leaving a trail of the last few samples
+
+3. **Observed Lift Distribution Chart** (D3 histogram) — Builds up over experiments:
+   - Each experiment's observed lift flows into this histogram
+   - Vertical dashed line at the true lift value
+   - Vertical dashed line at zero (no effect)
+   - Result metrics: experiments run, % statistically significant, mean observed lift, power (observed)
+   - For "Run 1": animated — the lift value visually drops from the sampling chart into the histogram bin
+   - For "Run 10/100": batch computation, histogram updates smoothly
+
+**Buttons:** Run 1 Experiment | Run 10 | Run 100 | Run 1,000 | Reset
+
+**Animation sequence for "Run 1 Experiment":**
+1. t=0ms: Dot appears on control distribution at sampled rate_a
+2. t=200ms: Dot appears on variant distribution at sampled rate_b
+3. t=400ms: Lift annotation appears between the dots ("Obs lift: +X.X%")
+4. t=600ms: Lift value transitions into the histogram, new bar highlights briefly
+5. t=800ms: Metrics update (experiment count, sig rate, mean lift)
+
+**Key teaching moments the design enables:**
+- **True lift = MDE**: Properly powered — sig rate should approximate the power level
+- **True lift < MDE**: Underpowered — low sig rate, winner's curse visible (mean obs lift of significant results > true lift)
+- **True lift = 0**: No effect — sig rate should approximate alpha (false positive rate)
+- **True lift >> MDE**: Overpowered — almost all experiments significant, tight observed lift distribution
+
+**JS math required (all feasible in pure JavaScript):**
+- `normalCDF(z)` — Abramowitz & Stegun approximation (already implemented in hypothesis-testing module)
+- `normalPPF(p)` — Peter Acklam rational approximation (~30 lines)
+- `normalPDF(x, mu, sigma)` — direct formula
+- `randn()` — Box-Muller transform for normal random numbers
+- Binomial sampling via normal approximation: `rate = p + sqrt(p(1−p)/n) × randn()`
+- Proportions z-test: `z = (rate_b − rate_a) / sqrt(p_pool × (1−p_pool) × 2/n)`
+
+**Guided exploration:**
+1. *"Set true lift equal to MDE (e.g., both 5%). Run 1,000 experiments. The sig rate should be close to your power setting. This is what 'properly powered' means."*
+2. *"Now set true lift to 0% and run 1,000 experiments. About alpha% are significant — these are all false positives. Notice the observed lift histogram is centered at zero."*
+3. *"Set true lift to 1% but keep MDE at 5%. Run 1,000 experiments. Very few are significant, and the ones that are show inflated observed lifts. This is the winner's curse in action."*
+4. *"Compare the true lift line to the mean observed lift of significant results. When are they close? When do they diverge? What drives the gap?"*
+
 #### Module 7: False Positive & False Negative Rates in Practice
 
 > *"The experiments you ship that shouldn't have been, and the winners you killed"*
@@ -201,9 +264,25 @@ These cover the failure modes that plague real experimentation programs.
 
 ---
 
-### Tier 4: Operational Excellence (Future)
+### Tier 4: Strategy & Operational Excellence
 
-These cover advanced topics for mature experimentation programs.
+These cover portfolio-level strategy and advanced operational topics.
+
+#### Module 16: Risk & Reward Simulations *(Live)*
+
+> *"How should you design your experiment program to maximize cumulative lift?"*
+
+- **Key insight:** Individual test design (alpha, power, MDE) creates a portfolio-level tradeoff: smaller MDE catches more real effects but requires longer tests, leaving fewer experiments per year. The "best" design maximizes **cumulative true lift shipped** over a year, not any single test's accuracy.
+- **3-step interactive flow:**
+  1. **Define true lift distribution** — Choose between industry presets (Mature Tech Platform, Typical Program, CRO/New Product — grounded in Kohavi & Thomke 2017, Georgiev 2018) or statistical distributions (Normal, Laplace, Student's t — the t-distribution based on Azevedo et al. 2020 who fitted df≈1.3 from Bing data)
+  2. **Design the experiment** — Set alpha (1-sided), power, MDE, baseline CVR, daily traffic. See computed sample size, runtime, and experiments/year.
+  3. **Simulate a year** — Run experiments back-to-back. Each draws a new true lift. Ship only 1-sided significant positive results. Summary: total experiments, TP, FP, FPR, cumulative true lift. Charts: Gantt timeline, cumulative lift step-line. "Simulate 100 Years" shows a histogram of yearly outcomes.
+- **Key terms introduced:** Portfolio optimization, cumulative true lift, experiment throughput, fat-tailed effect distributions
+- **Key references:**
+  - Kohavi & Thomke (HBR 2017) — win rates: 10-33% depending on product maturity
+  - Azevedo, Deng, Montiel Olea, Rao, Weyl (JPE 2020) — "A/B Testing with Fat Tails," tail parameter α=1.31 from Bing
+  - Amazon (AAAI 2024) — 3-component GMM fitted to 3,300 experiments
+  - Georgiev (Analytics Toolkit 2018) — 115 A/B tests, mean lift ~4%
 
 #### Module 13: Sample Ratio Mismatch (SRM)
 
@@ -324,59 +403,61 @@ Canonical definitions for terms used across modules. Each entry notes where it i
 
 ## 7. Tech Stack & Architecture
 
-**To be decided after PoC bake-off.** Three candidates are being evaluated:
+**Decided:** Plain HTML/CSS/JS + D3.js v7. No framework, no build step. Deployed via GitHub Pages from the `docs/` directory.
 
-| Stack | Visualization | Build System | Strengths |
-|-------|---------------|-------------|-----------|
-| Plain HTML + Plotly.js + jStat | Plotly.js | None (CDN) | Simplest setup, zero build step, direct mapping from existing Plotly charts |
-| React + Plotly.js | Plotly.js via react-plotly.js | Vite | Component model, state management, ecosystem |
-| Svelte + D3.js | D3.js (manual SVG) | Vite | Best visual ceiling, reactive by default, smallest bundle size, MLU Explain's approach |
+| Component | Technology |
+|-----------|-----------|
+| Markup | Vanilla HTML |
+| Styling | Vanilla CSS (`docs/style.css`) |
+| Visualizations | D3.js v7 (CDN) |
+| Statistical math | Pure inline JavaScript (normalCDF, normalPPF, sample size formulas, etc.) |
+| Navigation | Shared `nav.js` with central MODULES array |
+| Chart helpers | Shared `chart-utils.js` (createChart, addAxisLabels, updateAxes, addLineHover, holdToRepeat) |
+| Deployment | GitHub Pages (static files in `docs/`) |
 
-**PoC evaluation criteria:** Visual quality, interactivity, build effort, scalability to 15 modules, deployment simplicity.
+### Architecture Principles
 
-### Architecture Principles (stack-agnostic)
-
-1. **Static site** — No backend. All computation happens in the browser. Deployable to GitHub Pages.
-2. **Analytical distributions first** — Core visualizations render mathematical distributions (normal PDF/CDF via jStat), not Monte Carlo. This enables instant slider response.
-3. **Monte Carlo as secondary** — Where simulated experiment distributions add pedagogical value (Modules 5-7, 9-10), run simulations in a Web Worker to avoid freezing the UI.
-4. **Per-module isolation** — Each module's code is self-contained. No module depends on another module's runtime state.
-5. **Shared statistical utilities** — Common calculations (sample size formula, z-test, effect size) are shared across modules.
+1. **Static site** — No backend. All computation happens in the browser. Deployed to GitHub Pages from `docs/`.
+2. **Per-module isolation** — Each module is a single self-contained HTML file in `docs/modules/`. No module depends on another module's runtime state. Simulation logic and event wiring are inline `<script>` blocks.
+3. **Shared utilities only for infrastructure** — Navigation (`nav.js`) and D3 chart scaffolding (`chart-utils.js`) are shared. Statistical math functions are reimplemented inline in each module as needed.
+4. **Analytical distributions first** — Core visualizations render mathematical distributions (normal PDF/CDF), not Monte Carlo. This enables instant slider response.
+5. **Monte Carlo as secondary** — Where simulated experiment distributions add pedagogical value (Modules 5-7, 9-10, Risk & Reward), simulations run synchronously in the main thread (fast enough for the scale involved).
 
 ---
 
 ## 8. Phased Roadmap
 
-### Phase 0: PoC & Tech Decision
-- Build Module 4 (Power & Sample Size) in all 3 candidate stacks
-- Compare on visual quality, functionality, and build effort
-- Select the stack for production
-- **Exit criteria:** One version selected, team aligned on tech stack
+### Phase 0: PoC & Tech Decision *(Complete)*
+- Built PoC in multiple candidate stacks
+- **Selected: Plain HTML/CSS/JS + D3.js v7** — zero build step, GitHub Pages deployment
+- Site deployed at `docs/` with card grid landing page and shared nav/chart utilities
 
-### Phase 1: Foundation Modules
-- Set up the chosen static site framework with landing page (card grid navigation)
-- Build Modules 1-4 (Foundations tier)
-- Establish visual design system: color palette, typography, layout, component patterns
-- Write the shared glossary
+### Phase 1: Foundation Modules *(In Progress)*
+- Landing page with tiered card grid navigation: done
+- Module 1 (Law of Large Numbers): **live**
+- Module 2 (Hypothesis Testing): **live**
+- Module 3 (Confidence Intervals): not started
+- Module 4 (Power & Sample Size): not started
 - **Exit criteria:** 4-module site deployed, navigable, all simulations interactive
 
-### Phase 2: Core A/B Testing Modules
-- Build Modules 5-8 (Core tier)
-- Implement Web Worker pattern for Monte Carlo simulations
-- Add guided exploration sections with scenario-based questions
+### Phase 2: Core A/B Testing Modules *(In Progress)*
+- Module 5 (A/A Tests): not started
+- Module 6 (A/B Test Simulation): not started
+- Module 6b (Observed vs True Lift): **live**
+- Module 7 (FPR/FNR): not started
+- Module 8 (One-Tailed vs Two-Tailed): not started
 - **Exit criteria:** 8-module site covering foundational through intermediate concepts
 
 ### Phase 3: Advanced Pitfalls
-- Build Modules 9-12 (Advanced tier)
+- Modules 9-12: not started
 - Module 11 (Multiple Testing) requires new simulation design
 - Consider scrollytelling for Module 10 (Peeking) to animate data accumulation
 - **Exit criteria:** 12-module complete learning path
 
-### Phase 4: Operational Excellence & Polish
-- Build Modules 13-15 (all require new simulations)
-- Add quizzes/assessments at end of each tier
-- Mobile responsiveness pass
-- Accessibility audit
-- **Exit criteria:** Full 15-module hub, mobile-friendly, accessible
+### Phase 4: Strategy & Operational Excellence *(In Progress)*
+- Module 16 (Risk & Reward Simulations): **live** — portfolio-level yearly simulation with industry presets and literature-grounded distributions
+- Modules 13-15 (SRM, Sequential Testing, Bayesian): not started
+- **Exit criteria:** Full hub with strategy + operational modules, mobile-friendly, accessible
 
 ---
 
@@ -392,6 +473,17 @@ Canonical definitions for terms used across modules. Each entry notes where it i
 - Simulation interaction rate (% of visitors who move at least one slider)
 - Module completion rate (% who scroll to Key Takeaways)
 - Return visits (users bookmarking specific modules as reference)
+
+---
+
+## Appendix: Live Modules
+
+| Module | File | Tier | Status |
+|--------|------|------|--------|
+| Law of Large Numbers | `docs/modules/law-of-large-numbers.html` | Tier 1 Foundations | Live |
+| Hypothesis Testing | `docs/modules/hypothesis-testing.html` | Tier 1 Foundations | Live |
+| Observed vs True Lift | `docs/modules/observed-vs-true-lift.html` | Tier 2 Core | Live |
+| Risk & Reward Simulations | `docs/modules/risk-reward-simulations.html` | Tier 4 Strategy | Live |
 
 ---
 

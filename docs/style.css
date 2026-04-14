@@ -108,8 +108,41 @@ svg { display: block; }
 .tier-core { color: #059669; }
 .tier-advanced { color: #D97706; }
 .tier-future { color: #6b7280; }
+.tier-strategy { color: #7C3AED; }
 .module-card h3 { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem; }
 .module-card p { font-size: 0.9rem; color: #6b7280; margin-bottom: 0.75rem; }
 .module-card .card-status { font-size: 0.8rem; font-weight: 500; }
 .status-live { color: #059669; }
 .status-coming { color: #9ca3af; }
+
+/* ===== STEPPER ===== */
+.step-indicator { display: flex; align-items: center; justify-content: center; gap: 0; margin: 2rem 0; }
+.step-dot {
+  width: 32px; height: 32px; border-radius: 50%; border: 2px solid #e5e7eb;
+  background: #fff; color: #6b7280; font-size: 0.8rem; font-weight: 600;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  transition: all 0.3s;
+}
+.step-dot.active { border-color: #4F46E5; background: #4F46E5; color: #fff; }
+.step-dot.completed { border-color: #059669; background: #059669; color: #fff; }
+.step-connector { flex: 1; height: 2px; background: #e5e7eb; max-width: 80px; transition: background 0.3s; }
+.step-connector.completed { background: #059669; }
+.sim-step { display: none; }
+.sim-step.active { display: block; }
+.sim-step.stale { position: relative; opacity: 0.5; pointer-events: none; }
+.sim-step.stale::after {
+  content: 'Parameters changed — please redo this step';
+  position: absolute; top: 0; left: 0; right: 0;
+  background: #fef3c7; color: #92400e; text-align: center;
+  padding: 0.5rem; font-size: 0.85rem; font-weight: 500; border-radius: 6px;
+}
+
+/* ===== TOGGLE GROUP ===== */
+.toggle-group { display: inline-flex; border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden; margin-bottom: 1rem; }
+.toggle-btn {
+  padding: 0.5rem 1.25rem; background: #fff; color: #374151; border: none;
+  font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: all 0.15s;
+}
+.toggle-btn:not(:last-child) { border-right: 1px solid #e5e7eb; }
+.toggle-btn.active { background: #4F46E5; color: #fff; }
+.toggle-btn:hover:not(.active) { background: #f3f4f6; }

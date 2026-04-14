@@ -78,6 +78,80 @@
          gives a <em>different</em> answer. The histogram is the <strong>sampling distribution</strong> —
          the foundation of every p-value and confidence interval you'll ever compute.</p>
     </section>
+
+    <!-- === A/B TEST SECTION === -->
+    <hr style="border: none; border-top: 2px solid #e5e7eb; margin: 2.5rem 0;">
+
+    <section class="explainer" style="border-left-color: #059669;">
+      <h3 style="margin-bottom: 0.5rem; color: #059669;">From Coins to A/B Tests</h3>
+      <p>Coin flips are a clean illustration, but the Law of Large Numbers governs every A/B test you run.
+         Early in an experiment, observed conversion rates and lifts are noisy — just like the first few coin flips.
+         As visitors accumulate day by day, the observed metrics converge to their true values.</p>
+    </section>
+
+    <!-- A/B TEST CONTROLS -->
+    <h2 class="section-title">A/B Test Parameters</h2>
+    <div class="controls">
+      <div class="slider-group">
+        <label>Baseline CVR: <span id="cvrValue">1.50%</span></label>
+        <input type="range" id="baseCvr" min="0.5" max="10" value="1.5" step="0.1">
+      </div>
+      <div class="slider-group">
+        <label>True Lift: <span id="liftValue">0%</span></label>
+        <input type="range" id="trueLift" min="0" max="30" value="0" step="1">
+      </div>
+    </div>
+    <div class="controls">
+      <div class="slider-group">
+        <label>Visitors / Day / Variant: <span id="vpdValue">26,000</span></label>
+        <input type="range" id="vpd" min="500" max="100000" value="26000" step="500">
+      </div>
+      <div class="slider-group">
+        <label>Duration (days): <span id="daysValue">45</span></label>
+        <input type="range" id="abDays" min="5" max="90" value="45" step="1">
+      </div>
+    </div>
+
+    <!-- SINGLE A/B TEST -->
+    <h2 class="section-title">Single A/B Test</h2>
+    <p class="section-desc">One simulated experiment — watch CVR and lift stabilize as visitors accumulate day by day.</p>
+    <div class="metrics">
+      <div class="metric-card"><div class="metric-label">Final Observed Lift</div><div class="metric-value" id="abObsLift">—</div></div>
+      <div class="metric-card"><div class="metric-label">True Lift</div><div class="metric-value" id="abTrueLift">0%</div></div>
+      <div class="metric-card"><div class="metric-label">Total Visitors</div><div class="metric-value" id="abTotalVis">—</div></div>
+    </div>
+    <div class="chart-actions"><button id="abResim">Run Experiment</button></div>
+    <div class="chart-wrap" id="cvrWrap">
+      <div id="cvrChart"></div>
+      <div class="tooltip-d3" id="cvrTooltip"></div>
+    </div>
+    <div class="chart-wrap" id="liftWrap">
+      <div id="liftChart"></div>
+      <div class="tooltip-d3" id="liftTooltip"></div>
+    </div>
+
+    <!-- MULTI-EXPERIMENT OVERLAY -->
+    <h2 class="section-title">Multiple Experiments</h2>
+    <p class="section-desc">Run many simulated experiments and overlay their observed lift.
+       All lines start wide and converge toward the true lift — the Law of Large Numbers in action.</p>
+    <div class="controls">
+      <div class="slider-group">
+        <label>Number of simulations: <span id="nSimsValue">100</span></label>
+        <input type="range" id="nSims" min="10" max="500" value="100" step="10">
+      </div>
+    </div>
+    <div class="chart-actions"><button id="runMulti">Run Simulations</button></div>
+    <div class="chart-wrap" id="multiWrap">
+      <div id="multiChart"></div>
+    </div>
+
+    <section class="takeaway">
+      <h3>Key Takeaway</h3>
+      <p>Whether you're flipping coins or measuring conversion rates, the principle is the same:
+         <strong>small samples lie, large samples converge</strong>. The multi-experiment chart makes this visceral —
+         in the first few days, experiments with zero true lift can look like big winners or losers.
+         This is why we set minimum sample sizes and don't peek at early results.</p>
+    </section>
   </div>
 
   <script>
@@ -217,6 +291,201 @@
 
     simulateSingle();
     updateDistChart();
+
+    // ========== A/B TEST SIMULATIONS ==========
+
+    let baseCvrPct = 1.5, trueLiftPct = 0, vpd = 26000, abDays = 45, nSims = 100;
+
+    // Box-Muller normal random
+    function randn() {
+      let u = 0, v = 0;
+      while (u === 0) u = Math.random();
+      while (v === 0) v = Math.random();
+      return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+    }
+
+    // Binomial via CLT approximation (accurate for n*p > 5)
+    function rbinom(n, p) {
+      if (p <= 0) return 0;
+      if (p >= 1) return n;
+      return Math.max(0, Math.min(n, Math.round(n * p + Math.sqrt(n * p * (1 - p)) * randn())));
+    }
+
+    // Simulate one A/B experiment day-by-day
+    function simOneAB(cvrC, cvrV, visitorsPerDay, days) {
+      let cumC = 0, cumV = 0, cumN = 0;
+      const results = [];
+      for (let d = 1; d <= days; d++) {
+        cumC += rbinom(visitorsPerDay, cvrC);
+        cumV += rbinom(visitorsPerDay, cvrV);
+        cumN += visitorsPerDay;
+        const oc = cumC / cumN, ov = cumV / cumN;
+        results.push({ day: d, obsCvrC: oc, obsCvrV: ov, obsLift: oc > 0 ? (ov - oc) / oc : 0 });
+      }
+      return results;
+    }
+
+    // --- CVR Chart ---
+    const cc = createChart('#cvrChart');
+    addAxisLabels(cc, 'Day', 'CVR');
+
+    const cvrLineGen = d3.line().x(d => cc.x(d.day)).y(d => cc.y(d.val));
+    const controlPath = cc.g.append('path').attr('fill', 'none').attr('stroke', '#4F46E5').attr('stroke-width', 2);
+    const variantPath = cc.g.append('path').attr('fill', 'none').attr('stroke', '#059669').attr('stroke-width', 2);
+    const controlRefL = cc.g.append('line').attr('stroke', '#9ca3af').attr('stroke-width', 1.5).attr('stroke-dasharray', '6 3');
+    const variantRefL = cc.g.append('line').attr('stroke', '#9ca3af').attr('stroke-width', 1.5).attr('stroke-dasharray', '6 3');
+
+    const cvrLeg = cc.g.append('g').attr('transform', `translate(${cc.width - 180}, 10)`).style('font-size', '11px');
+    cvrLeg.append('line').attr('x1',0).attr('y1',7).attr('x2',18).attr('y2',7).attr('stroke','#4F46E5').attr('stroke-width',2);
+    cvrLeg.append('text').attr('x',24).attr('y',11).text('Control CVR');
+    cvrLeg.append('line').attr('x1',0).attr('y1',25).attr('x2',18).attr('y2',25).attr('stroke','#059669').attr('stroke-width',2);
+    cvrLeg.append('text').attr('x',24).attr('y',29).text('Variant CVR');
+    cvrLeg.append('line').attr('x1',0).attr('y1',43).attr('x2',18).attr('y2',43).attr('stroke','#9ca3af').attr('stroke-width',1.5).attr('stroke-dasharray','6 3');
+    cvrLeg.append('text').attr('x',24).attr('y',47).text('True CVR');
+
+    // CVR hover
+    let abData = [];
+    const cvrOverlay = cc.g.append('rect').attr('width', cc.width).attr('height', cc.height).attr('fill', 'none').attr('pointer-events', 'all');
+    const cvrHL = cc.g.append('line').attr('stroke', '#9ca3af').attr('stroke-dasharray', '4 3').style('opacity', 0);
+    const cvrDotC = cc.g.append('circle').attr('r', 4).attr('fill', '#4F46E5').attr('stroke', '#fff').attr('stroke-width', 2).style('opacity', 0);
+    const cvrDotV = cc.g.append('circle').attr('r', 4).attr('fill', '#059669').attr('stroke', '#fff').attr('stroke-width', 2).style('opacity', 0);
+    const cvrTipEl = document.getElementById('cvrTooltip');
+
+    cvrOverlay.on('mousemove', function(event) {
+      if (!abData.length) return;
+      const [mx] = d3.pointer(event);
+      const idx = Math.max(0, Math.min(Math.round(cc.x.invert(mx)) - 1, abData.length - 1));
+      const d = abData[idx];
+      if (!d) return;
+      cvrHL.attr('x1', cc.x(d.day)).attr('x2', cc.x(d.day)).attr('y1', 0).attr('y2', cc.height).style('opacity', 1);
+      cvrDotC.attr('cx', cc.x(d.day)).attr('cy', cc.y(d.obsCvrC)).style('opacity', 1);
+      cvrDotV.attr('cx', cc.x(d.day)).attr('cy', cc.y(d.obsCvrV)).style('opacity', 1);
+      const wr = document.getElementById('cvrWrap').getBoundingClientRect();
+      const cr = document.querySelector('#cvrChart svg').getBoundingClientRect();
+      cvrTipEl.style.opacity = '1';
+      cvrTipEl.innerHTML = `Day ${d.day}<br>Control: ${(d.obsCvrC * 100).toFixed(3)}%<br>Variant: ${(d.obsCvrV * 100).toFixed(3)}%`;
+      cvrTipEl.style.left = (cr.left - wr.left + cc.margin.left + cc.x(d.day) + 12) + 'px';
+      cvrTipEl.style.top = (cr.top - wr.top + cc.margin.top + Math.min(cc.y(d.obsCvrC), cc.y(d.obsCvrV)) - 30) + 'px';
+    });
+    cvrOverlay.on('mouseleave', () => {
+      cvrHL.style('opacity', 0); cvrDotC.style('opacity', 0); cvrDotV.style('opacity', 0);
+      cvrTipEl.style.opacity = '0';
+    });
+
+    // --- Lift Chart ---
+    const lc = createChart('#liftChart');
+    addAxisLabels(lc, 'Day', 'Observed Lift');
+
+    const liftLineGen = d3.line().x(d => lc.x(d.x)).y(d => lc.y(d.y));
+    const liftPath = lc.g.append('path').attr('fill', 'none').attr('stroke', '#7C3AED').attr('stroke-width', 2);
+    const liftRefL = lc.g.append('line').attr('stroke', '#EF4444').attr('stroke-width', 2).attr('stroke-dasharray', '8 4');
+    const liftRefTxt = lc.g.append('text').attr('fill', '#EF4444').attr('font-size', 12).attr('text-anchor', 'end');
+
+    const liftHover = addLineHover(lc, '#liftWrap', document.getElementById('liftTooltip'), {
+      color: '#7C3AED',
+      formatTooltip: d => `Day ${d.x}<br>Observed Lift: ${d.y >= 0 ? '+' : ''}${d.y.toFixed(1)}%`
+    });
+
+    // --- Multi-Experiment Chart ---
+    const mc = createChart('#multiChart', { height: 400 });
+    addAxisLabels(mc, 'Day', 'Observed Lift');
+
+    const multiLinesG = mc.g.append('g');
+    const multiRefL = mc.g.append('line').attr('stroke', '#000').attr('stroke-width', 2.5).attr('stroke-dasharray', '10 5');
+    const multiRefTxt = mc.g.append('text').attr('fill', '#000').attr('font-size', 13).attr('font-weight', '600').attr('text-anchor', 'end');
+
+    function runSingleAB() {
+      const cvrC = baseCvrPct / 100;
+      const cvrV = cvrC * (1 + trueLiftPct / 100);
+      abData = simOneAB(cvrC, cvrV, vpd, abDays);
+
+      const last = abData[abData.length - 1];
+      document.getElementById('abObsLift').textContent = (last.obsLift >= 0 ? '+' : '') + (last.obsLift * 100).toFixed(1) + '%';
+      document.getElementById('abTrueLift').textContent = trueLiftPct + '%';
+      document.getElementById('abTotalVis').textContent = (abDays * vpd * 2).toLocaleString();
+
+      // CVR chart
+      const allCvrs = abData.flatMap(d => [d.obsCvrC, d.obsCvrV]).concat([cvrC, cvrV]);
+      const cvrMin = Math.min(...allCvrs), cvrMax = Math.max(...allCvrs);
+      const cvrPad = Math.max((cvrMax - cvrMin) * 0.2, 0.0005);
+      updateAxes(cc, [1, abDays], [cvrMin - cvrPad, cvrMax + cvrPad], { yFormat: d => (d * 100).toFixed(2) + '%' });
+
+      const t = d3.transition().duration(300);
+      controlPath.datum(abData.map(d => ({ day: d.day, val: d.obsCvrC }))).transition(t).attr('d', cvrLineGen);
+      variantPath.datum(abData.map(d => ({ day: d.day, val: d.obsCvrV }))).transition(t).attr('d', cvrLineGen);
+      controlRefL.attr('x1', cc.x(1)).attr('x2', cc.x(abDays)).attr('y1', cc.y(cvrC)).attr('y2', cc.y(cvrC));
+      variantRefL.attr('x1', cc.x(1)).attr('x2', cc.x(abDays)).attr('y1', cc.y(cvrV)).attr('y2', cc.y(cvrV));
+
+      // Lift chart
+      const liftData = abData.map(d => ({ x: d.day, y: d.obsLift * 100 }));
+      liftHover.update(liftData);
+      const allLifts = liftData.map(d => d.y).concat([trueLiftPct]);
+      const lMin = Math.min(...allLifts), lMax = Math.max(...allLifts);
+      const lPad = Math.max((lMax - lMin) * 0.15, 2);
+      updateAxes(lc, [1, abDays], [lMin - lPad, lMax + lPad], { yFormat: d => d.toFixed(0) + '%' });
+
+      liftPath.datum(liftData).transition(t).attr('d', liftLineGen);
+      liftRefL.attr('x1', lc.x(1)).attr('x2', lc.x(abDays)).attr('y1', lc.y(trueLiftPct)).attr('y2', lc.y(trueLiftPct));
+      liftRefTxt.attr('x', lc.x(abDays)).attr('y', lc.y(trueLiftPct) - 6).text(`True Lift = ${trueLiftPct.toFixed(1)}%`);
+    }
+
+    function runMultiAB() {
+      const cvrC = baseCvrPct / 100;
+      const cvrV = cvrC * (1 + trueLiftPct / 100);
+
+      const allSims = [];
+      let gMin = Infinity, gMax = -Infinity;
+      for (let i = 0; i < nSims; i++) {
+        const data = simOneAB(cvrC, cvrV, vpd, abDays);
+        const series = data.map(d => ({ x: d.day, y: d.obsLift * 100 }));
+        allSims.push(series);
+        series.forEach(d => { if (d.y < gMin) gMin = d.y; if (d.y > gMax) gMax = d.y; });
+      }
+      gMin = Math.min(gMin, trueLiftPct);
+      gMax = Math.max(gMax, trueLiftPct);
+      const pad = Math.max((gMax - gMin) * 0.08, 2);
+
+      updateAxes(mc, [1, abDays], [gMin - pad, gMax + pad], { yFormat: d => d.toFixed(0) + '%' });
+
+      const mLineGen = d3.line().x(d => mc.x(d.x)).y(d => mc.y(d.y));
+      multiLinesG.selectAll('path').remove();
+      allSims.forEach(series => {
+        multiLinesG.append('path').datum(series)
+          .attr('fill', 'none').attr('stroke', '#555').attr('stroke-width', 1).attr('stroke-opacity', 0.2)
+          .attr('d', mLineGen);
+      });
+
+      multiRefL.attr('x1', mc.x(1)).attr('x2', mc.x(abDays)).attr('y1', mc.y(trueLiftPct)).attr('y2', mc.y(trueLiftPct));
+      multiRefTxt.attr('x', mc.x(abDays)).attr('y', mc.y(trueLiftPct) - 8).text(`True Lift = ${trueLiftPct.toFixed(1)}%`);
+    }
+
+    // --- A/B Slider Wiring ---
+    document.getElementById('baseCvr').addEventListener('input', function() {
+      baseCvrPct = parseFloat(this.value);
+      document.getElementById('cvrValue').textContent = baseCvrPct.toFixed(2) + '%';
+    });
+    document.getElementById('trueLift').addEventListener('input', function() {
+      trueLiftPct = parseInt(this.value);
+      document.getElementById('liftValue').textContent = trueLiftPct + '%';
+    });
+    document.getElementById('vpd').addEventListener('input', function() {
+      vpd = parseInt(this.value);
+      document.getElementById('vpdValue').textContent = vpd.toLocaleString();
+    });
+    document.getElementById('abDays').addEventListener('input', function() {
+      abDays = parseInt(this.value);
+      document.getElementById('daysValue').textContent = abDays;
+    });
+    document.getElementById('nSims').addEventListener('input', function() {
+      nSims = parseInt(this.value);
+      document.getElementById('nSimsValue').textContent = nSims;
+    });
+
+    document.getElementById('abResim').addEventListener('click', runSingleAB);
+    document.getElementById('runMulti').addEventListener('click', runMultiAB);
+
+    runSingleAB();
+    runMultiAB();
   </script>
 </body>
 </html>

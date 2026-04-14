@@ -1,0 +1,1082 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Risk & Reward Simulations — Exp Learning Hub</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <link rel="stylesheet" href="../style.css">
+  <script src="../js/nav.js"></script>
+  <script src="../js/chart-utils.js"></script>
+  <style>
+    .sub-panel { display: none; }
+    .sub-panel.visible { display: block; }
+    .warning-badge { display: inline-block; background: #fef3c7; color: #92400e; padding: 0.3rem 0.75rem; border-radius: 6px; font-size: 0.85rem; font-weight: 500; margin-top: 0.5rem; }
+    .result-positive { color: #059669; }
+    .result-negative { color: #EF4444; }
+    .result-neutral { color: #6b7280; }
+    .metrics-2 { grid-template-columns: repeat(2, 1fr); }
+    .metrics-4 { grid-template-columns: repeat(4, 1fr); }
+    .preset-group { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
+    .preset-btn { padding: 0.4rem 0.9rem; background: #fff; color: #374151; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.8rem; cursor: pointer; transition: all 0.15s; }
+    .preset-btn:hover { border-color: #4F46E5; color: #4F46E5; }
+    .preset-btn.active { background: #EEF2FF; border-color: #4F46E5; color: #4F46E5; font-weight: 600; }
+    .preset-source { font-size: 0.75rem; color: #9ca3af; margin-top: -0.5rem; margin-bottom: 1rem; }
+    @media (max-width: 600px) {
+      .metrics-4, .metrics { grid-template-columns: repeat(2, 1fr); }
+      .metrics-2 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <script>renderNav('risk-reward-simulations');</script>
+
+  <div class="container" style="max-width: 900px;">
+    <header>
+      <h1>Risk & Reward Simulations</h1>
+      <p class="subtitle">Simulate a year of A/B tests. Find the experiment design that maximizes cumulative true lift.</p>
+    </header>
+
+    <section class="explainer">
+      <p>Experiment programs run dozens of tests per year. Some ideas truly help, some hurt, and many do nothing.
+         Your <strong>experiment design</strong> &mdash; the alpha, power, and MDE you choose &mdash; determines which true effects
+         you detect, which you miss, and how much real lift you ship.</p>
+      <p class="highlight">Define a portfolio of experiment ideas, set your design, then simulate a full year to see the results.
+         Uses a <strong>one-sided test</strong>: only positive significant results get shipped.</p>
+    </section>
+
+    <!-- STEP INDICATOR -->
+    <div class="step-indicator">
+      <div class="step-dot active" id="dot1">1</div><div class="step-connector" id="conn1"></div>
+      <div class="step-dot" id="dot2">2</div><div class="step-connector" id="conn2"></div>
+      <div class="step-dot" id="dot3">3</div>
+    </div>
+
+    <!-- ==================== STEP 1: DISTRIBUTION ==================== -->
+    <section class="sim-step active" id="step1">
+      <h2 class="section-title">Step 1 &mdash; Define the True Lift Distribution</h2>
+      <p class="section-desc">What does your portfolio of experiment ideas look like? Define the <em>reality</em>: what fraction
+        are winners, losers, or flat? Each simulated experiment will draw a true lift from this distribution.</p>
+
+      <div class="toggle-group" id="distModeToggle">
+        <button class="toggle-btn active" data-mode="naive">Naive</button>
+        <button class="toggle-btn" data-mode="statistical">Statistical Distribution</button>
+      </div>
+
+      <!-- Naive sub-panel -->
+      <div class="sub-panel visible" id="naivePanel">
+        <p class="section-desc" style="margin-bottom:0.5rem"><strong>Industry presets:</strong></p>
+        <div class="preset-group" id="naivePresets">
+          <button class="preset-btn" data-preset="mature">Mature Tech Platform</button>
+          <button class="preset-btn active" data-preset="typical">Typical Program</button>
+          <button class="preset-btn" data-preset="cro">CRO / New Product</button>
+          <button class="preset-btn" data-preset="custom">Custom</button>
+        </div>
+        <p class="preset-source" id="presetSource">Source: Kohavi &amp; Thomke, HBR 2017 &mdash; &ldquo;one-third positive, one-third neutral, one-third negative&rdquo;</p>
+        <div class="controls">
+          <div class="slider-group">
+            <label>% Winners: <span id="winRateValue">33</span>%</label>
+            <input type="range" id="winRate" min="0" max="100" value="33" step="1">
+          </div>
+          <div class="slider-group">
+            <label>Winner Lift: +<span id="winLiftValue">2.0</span>%</label>
+            <input type="range" id="winLift" min="0.1" max="20" value="2" step="0.1">
+          </div>
+        </div>
+        <div class="controls">
+          <div class="slider-group">
+            <label>% Losers: <span id="loseRateValue">33</span>%</label>
+            <input type="range" id="loseRate" min="0" max="100" value="33" step="1">
+          </div>
+          <div class="slider-group">
+            <label>Loser Lift: -<span id="loseLiftValue">2.0</span>%</label>
+            <input type="range" id="loseLift" min="0.1" max="20" value="2" step="0.1">
+          </div>
+        </div>
+        <p class="section-desc">Flat (0% lift): <strong id="flatRateValue">34</strong>%</p>
+      </div>
+
+      <!-- Statistical sub-panel -->
+      <div class="sub-panel" id="statPanel">
+        <div class="toggle-group" id="statDistToggle">
+          <button class="toggle-btn active" data-dist="normal">Normal</button>
+          <button class="toggle-btn" data-dist="laplace">Laplace</button>
+          <button class="toggle-btn" data-dist="t">Student's t</button>
+        </div>
+        <div id="normalParams" class="sub-panel visible">
+          <div class="controls">
+            <div class="slider-group">
+              <label>Mean Lift: <span id="normMeanValue">0.0</span>%</label>
+              <input type="range" id="normMean" min="-5" max="5" value="0" step="0.1">
+            </div>
+            <div class="slider-group">
+              <label>Std Dev: <span id="normStdValue">2.0</span>%</label>
+              <input type="range" id="normStd" min="0.5" max="10" value="2" step="0.1">
+            </div>
+          </div>
+        </div>
+        <div id="laplaceParams" class="sub-panel">
+          <div class="controls">
+            <div class="slider-group">
+              <label>Location (mean): <span id="lapLocValue">0.0</span>%</label>
+              <input type="range" id="lapLoc" min="-5" max="5" value="0" step="0.1">
+            </div>
+            <div class="slider-group">
+              <label>Scale: <span id="lapScaleValue">2.0</span>%</label>
+              <input type="range" id="lapScale" min="0.5" max="10" value="2" step="0.1">
+            </div>
+          </div>
+        </div>
+        <div id="tParams" class="sub-panel">
+          <p class="preset-source">Based on Azevedo et al. (2020, JPE) &mdash; fitted df&asymp;1.3 from Bing experiment data. df=2 is a practical default with finite variance.</p>
+          <div class="controls">
+            <div class="slider-group">
+              <label>Location (mean): <span id="tLocValue">0.0</span>%</label>
+              <input type="range" id="tLoc" min="-5" max="5" value="0" step="0.1">
+            </div>
+            <div class="slider-group">
+              <label>Scale: <span id="tScaleValue">1.0</span>%</label>
+              <input type="range" id="tScale" min="0.1" max="5" value="1" step="0.1">
+            </div>
+            <div class="slider-group">
+              <label>Degrees of freedom: <span id="tDfValue">2.0</span></label>
+              <input type="range" id="tDf" min="1" max="10" value="2" step="0.5">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="chart-wrap" id="liftDistWrap">
+        <div id="liftDistChart"></div>
+      </div>
+
+      <div class="chart-actions">
+        <button id="confirmDist">Confirm Distribution &amp; Continue</button>
+      </div>
+    </section>
+
+    <!-- ==================== STEP 2: EXPERIMENT DESIGN ==================== -->
+    <section class="sim-step" id="step2">
+      <h2 class="section-title">Step 2 &mdash; Design the Experiment</h2>
+      <p class="section-desc">Set your experiment parameters. These determine sample size, runtime, and how many experiments
+        fit in a year. The tradeoff: smaller MDE catches more effects but needs longer tests, leaving fewer experiments per year.</p>
+
+      <div class="controls">
+        <div class="slider-group">
+          <label>Alpha (1-sided): <span id="alphaValue">0.05</span></label>
+          <input type="range" id="alphaSlider" min="0.01" max="0.20" value="0.05" step="0.01">
+        </div>
+        <div class="slider-group">
+          <label>Power (1&minus;&beta;): <span id="powerValue">0.80</span></label>
+          <input type="range" id="powerSlider" min="0.50" max="0.99" value="0.80" step="0.01">
+        </div>
+      </div>
+      <div class="controls">
+        <div class="slider-group">
+          <label>MDE (relative): <span id="mdeValue">2.0</span>%</label>
+          <input type="range" id="mdeSlider" min="0.5" max="20" value="2" step="0.5">
+        </div>
+        <div class="slider-group">
+          <label>Baseline CVR: <span id="baselineValue">5.0</span>%</label>
+          <input type="range" id="baselineSlider" min="0.5" max="30" value="5" step="0.5">
+        </div>
+      </div>
+      <div class="controls">
+        <div class="slider-group">
+          <label>Daily Traffic (users/day): <span id="trafficValue">10,000</span></label>
+          <input type="range" id="trafficSlider" min="2" max="6" value="4" step="0.1">
+        </div>
+      </div>
+
+      <div class="metrics metrics-4">
+        <div class="metric-card"><div class="metric-label">Sample Size / Group</div><div class="metric-value" id="sampleSizeVal">&mdash;</div></div>
+        <div class="metric-card"><div class="metric-label">Runtime (days)</div><div class="metric-value" id="runtimeVal">&mdash;</div></div>
+        <div class="metric-card"><div class="metric-label">Experiments / Year</div><div class="metric-value" id="expsPerYear">&mdash;</div></div>
+        <div class="metric-card"><div class="metric-label">Test Type</div><div class="metric-value" style="font-size:1rem">1-sided</div></div>
+      </div>
+
+      <div id="runtimeWarning" class="warning-badge" style="display:none">Runtime exceeds 365 days &mdash; no experiments can run!</div>
+
+      <div class="chart-actions">
+        <button id="confirmDesign">Continue to Simulation</button>
+      </div>
+    </section>
+
+    <!-- ==================== STEP 3: YEARLY SIMULATION ==================== -->
+    <section class="sim-step" id="step3">
+      <h2 class="section-title">Step 3 &mdash; Simulate a Year of Experiments</h2>
+      <p class="section-desc">Run experiments back-to-back for a full year. Each experiment draws a new true lift from your
+        distribution, runs for the calculated runtime, and you ship only the statistically significant positive results.
+        <strong>Change the design parameters and re-simulate to find the strategy that maximizes cumulative true lift.</strong></p>
+
+      <div class="controls">
+        <div class="slider-group">
+          <label>Alpha (1-sided): <span id="alphaValue3">0.05</span></label>
+          <input type="range" id="alphaSlider3" min="0.01" max="0.20" value="0.05" step="0.01">
+        </div>
+        <div class="slider-group">
+          <label>Power (1&minus;&beta;): <span id="powerValue3">0.80</span></label>
+          <input type="range" id="powerSlider3" min="0.50" max="0.99" value="0.80" step="0.01">
+        </div>
+        <div class="slider-group">
+          <label>MDE (relative): <span id="mdeValue3">2.0</span>%</label>
+          <input type="range" id="mdeSlider3" min="0.5" max="20" value="2" step="0.5">
+        </div>
+      </div>
+      <div class="controls">
+        <div class="slider-group">
+          <label>Baseline CVR: <span id="baselineValue3">5.0</span>%</label>
+          <input type="range" id="baselineSlider3" min="0.5" max="30" value="5" step="0.5">
+        </div>
+        <div class="slider-group">
+          <label>Daily Traffic: <span id="trafficValue3">10,000</span></label>
+          <input type="range" id="trafficSlider3" min="2" max="6" value="4" step="0.1">
+        </div>
+      </div>
+
+      <div class="metrics metrics-4" id="designSummary">
+        <div class="metric-card"><div class="metric-label">Sample Size / Group</div><div class="metric-value" id="ss3">&mdash;</div></div>
+        <div class="metric-card"><div class="metric-label">Runtime (days)</div><div class="metric-value" id="rt3">&mdash;</div></div>
+        <div class="metric-card"><div class="metric-label">Experiments / Year</div><div class="metric-value" id="epy3">&mdash;</div></div>
+        <div class="metric-card"><div class="metric-label">Test Type</div><div class="metric-value" style="font-size:1rem">1-sided</div></div>
+      </div>
+      <div id="runtimeWarning3" class="warning-badge" style="display:none">Runtime exceeds 365 days &mdash; no experiments can run!</div>
+
+      <div class="chart-actions">
+        <button id="runYear">Simulate 1 Year</button>
+        <button id="runYearMany" class="btn-secondary">Simulate 100 Years</button>
+        <button id="resetYear" class="btn-danger">Reset</button>
+      </div>
+
+      <!-- Single-year metrics -->
+      <div id="yearMetrics" style="display:none">
+        <div class="metrics">
+          <div class="metric-card"><div class="metric-label">Experiments Run</div><div class="metric-value" id="ymTotal">&mdash;</div></div>
+          <div class="metric-card"><div class="metric-label">Positive True Lift</div><div class="metric-value" id="ymPositive">&mdash;</div></div>
+          <div class="metric-card"><div class="metric-label">Negative True Lift</div><div class="metric-value" id="ymNegative">&mdash;</div></div>
+        </div>
+        <div class="metrics">
+          <div class="metric-card"><div class="metric-label">Shipped (statsig+)</div><div class="metric-value" id="ymStatsig">&mdash;</div></div>
+          <div class="metric-card"><div class="metric-label">True Positives</div><div class="metric-value" id="ymTP">&mdash;</div></div>
+          <div class="metric-card"><div class="metric-label">False Positives</div><div class="metric-value" id="ymFP">&mdash;</div></div>
+        </div>
+        <div class="metrics">
+          <div class="metric-card"><div class="metric-label">False Positive Rate</div><div class="metric-value" id="ymFPR">&mdash;</div></div>
+          <div class="metric-card"><div class="metric-label">Cumulative True Lift (shipped)</div><div class="metric-value" id="ymCumLift">&mdash;</div></div>
+          <div class="metric-card"><div class="metric-label">Avg True Lift / Shipped</div><div class="metric-value" id="ymAvgLift">&mdash;</div></div>
+        </div>
+      </div>
+
+      <div class="chart-wrap" id="yearTimelineWrap" style="display:none">
+        <div id="yearTimelineChart"></div>
+      </div>
+
+      <div class="chart-wrap" id="yearLiftWrap" style="display:none">
+        <div id="yearLiftChart"></div>
+      </div>
+
+      <!-- Multi-year histogram -->
+      <div id="multiYearSection" style="display:none">
+        <h2 class="section-title">Distribution of Cumulative True Lift Across 100 Years</h2>
+        <p class="section-desc">Each year is an independent simulation. The histogram shows the range of outcomes you might expect.</p>
+        <div class="metrics">
+          <div class="metric-card"><div class="metric-label">Median Cumulative Lift</div><div class="metric-value" id="myMedian">&mdash;</div></div>
+          <div class="metric-card"><div class="metric-label">Mean Cumulative Lift</div><div class="metric-value" id="myMean">&mdash;</div></div>
+          <div class="metric-card"><div class="metric-label">% Years with Positive Lift</div><div class="metric-value" id="myPctPos">&mdash;</div></div>
+        </div>
+        <div class="chart-wrap" id="multiYearWrap">
+          <div id="multiYearChart"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="takeaway" id="takeawaySection" style="display:none">
+      <h3>The Portfolio Lesson</h3>
+      <p>Underpowered tests (low power or high MDE) are cheap per test but miss real effects and let false positives through.
+         Overpowered tests are precise but slow &mdash; you run fewer per year. The sweet spot maximizes
+         <strong>cumulative true lift shipped</strong>, not any single test's accuracy.</p>
+      <p>Try different designs: lower your MDE to catch smaller effects (but run fewer tests),
+         or raise alpha to ship more aggressively (but accept more false positives). The right answer depends on
+         your portfolio's true lift distribution &mdash; and now you have the tool to find it.</p>
+    </section>
+  </div>
+
+  <script>
+    // =====================================================================
+    // STATE
+    // =====================================================================
+    let distMode = 'naive';
+    let naiveWinRate = 33, naiveWinLift = 2.0, naiveLoseRate = 33, naiveLoseLift = 2.0;
+    let statDistType = 'normal';
+    let normMean = 0, normStd = 2;
+    let lapLoc = 0, lapScale = 2;
+    let tLoc = 0, tScale = 1, tDf = 2;
+
+    let yearExperiments = [];
+    let multiYearResults = [];
+
+    // =====================================================================
+    // MATH UTILITIES
+    // =====================================================================
+    function normalCDF(z) {
+      const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741, a4 = -1.453152027, a5 = 1.061405429;
+      const p = 0.3275911;
+      const sign = z < 0 ? -1 : 1;
+      const az = Math.abs(z);
+      const t = 1.0 / (1.0 + p * az);
+      const y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-az * az / 2);
+      return 0.5 * (1.0 + sign * y);
+    }
+
+    function normalPPF(p) {
+      if (p <= 0) return -Infinity;
+      if (p >= 1) return Infinity;
+      if (p === 0.5) return 0;
+      const a = [-3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02,
+                  1.383577518672690e+02, -3.066479806614716e+01, 2.506628277459239e+00];
+      const b = [-5.447609879822406e+01, 1.615858368580409e+02, -1.556989798598866e+02,
+                  6.680131188771972e+01, -1.328068155288572e+01];
+      const c = [-7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e+00,
+                 -2.549732539343734e+00, 4.374664141464968e+00, 2.938163982698783e+00];
+      const d = [7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e+00, 3.754408661907416e+00];
+      const pLow = 0.02425, pHigh = 1 - pLow;
+      let q, r;
+      if (p < pLow) {
+        q = Math.sqrt(-2 * Math.log(p));
+        return (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) /
+               ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);
+      } else if (p <= pHigh) {
+        q = p - 0.5; r = q * q;
+        return (((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q /
+               (((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1);
+      } else {
+        q = Math.sqrt(-2 * Math.log(1 - p));
+        return -(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) /
+                ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);
+      }
+    }
+
+    function sampleNormal(mean, std) {
+      return mean + std * normalPPF(Math.random());
+    }
+
+    function sampleLaplace(loc, scale) {
+      const u = Math.random() - 0.5;
+      return loc - scale * Math.sign(u) * Math.log(1 - 2 * Math.abs(u));
+    }
+
+    function normalPDF(x, mean, std) {
+      const z = (x - mean) / std;
+      return Math.exp(-0.5 * z * z) / (std * Math.sqrt(2 * Math.PI));
+    }
+
+    function laplacePDF(x, loc, scale) {
+      return (1 / (2 * scale)) * Math.exp(-Math.abs(x - loc) / scale);
+    }
+
+    // Gamma function (Lanczos approximation) — needed for t-distribution PDF
+    function gammaLn(z) {
+      const g = 7;
+      const coef = [0.99999999999980993, 676.5203681218851, -1259.1392167224028,
+        771.32342877765313, -176.61502916214059, 12.507343278686905,
+        -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
+      if (z < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * z)) - gammaLn(1 - z);
+      z -= 1;
+      let x = coef[0];
+      for (let i = 1; i < g + 2; i++) x += coef[i] / (z + i);
+      const t = z + g + 0.5;
+      return 0.5 * Math.log(2 * Math.PI) + (z + 0.5) * Math.log(t) - t + Math.log(x);
+    }
+
+    function tPDF(x, loc, scale, df) {
+      const z = (x - loc) / scale;
+      const logCoeff = gammaLn((df + 1) / 2) - gammaLn(df / 2) - 0.5 * Math.log(df * Math.PI);
+      return Math.exp(logCoeff - ((df + 1) / 2) * Math.log(1 + z * z / df)) / scale;
+    }
+
+    function sampleT(loc, scale, df) {
+      // Ratio of normal to sqrt(chi-squared/df)
+      const z = sampleNormal(0, 1);
+      // Chi-squared(df) = sum of df standard normals squared
+      let chi2 = 0;
+      for (let i = 0; i < Math.ceil(df); i++) {
+        const n = sampleNormal(0, 1);
+        chi2 += n * n;
+      }
+      // For non-integer df, use fractional part with one more sample weighted
+      const intDf = Math.ceil(df);
+      if (intDf !== df) {
+        // Simple approximation: scale chi2
+        chi2 *= df / intDf;
+      }
+      return loc + scale * z / Math.sqrt(chi2 / df);
+    }
+
+    // =====================================================================
+    // DISTRIBUTION HELPERS
+    // =====================================================================
+    function sampleFromLiftDistribution() {
+      if (distMode === 'naive') {
+        const r = Math.random() * 100;
+        if (r < naiveWinRate) return naiveWinLift;
+        if (r < naiveWinRate + naiveLoseRate) return -naiveLoseLift;
+        return 0;
+      }
+      if (statDistType === 'normal') return sampleNormal(normMean, normStd);
+      if (statDistType === 'laplace') return sampleLaplace(lapLoc, lapScale);
+      if (statDistType === 't') return sampleT(tLoc, tScale, tDf);
+      return 0;
+    }
+
+    function getDensityCurve(xMin, xMax, numPoints) {
+      const pts = [];
+      const step = (xMax - xMin) / numPoints;
+      for (let i = 0; i <= numPoints; i++) {
+        const x = xMin + i * step;
+        let y = 0;
+        if (distMode === 'statistical') {
+          if (statDistType === 'normal') y = normalPDF(x, normMean, normStd);
+          else if (statDistType === 'laplace') y = laplacePDF(x, lapLoc, lapScale);
+          else if (statDistType === 't') y = tPDF(x, tLoc, tScale, tDf);
+        }
+        pts.push({ x, y });
+      }
+      return pts;
+    }
+
+    // =====================================================================
+    // EXPERIMENT MATH (1-SIDED TEST)
+    // =====================================================================
+    function computeSampleSize(alpha, power, baseline, mde) {
+      // 1-sided: use z_alpha instead of z_{alpha/2}
+      const zAlpha = normalPPF(1 - alpha);
+      const zBeta = normalPPF(power);
+      const p1 = baseline / 100;
+      const p2 = p1 * (1 + mde / 100);
+      const pBar = (p1 + p2) / 2;
+      const num = Math.pow(zAlpha * Math.sqrt(2 * pBar * (1 - pBar)) + zBeta * Math.sqrt(p1 * (1 - p1) + p2 * (1 - p2)), 2);
+      const den = Math.pow(p2 - p1, 2);
+      if (den === 0) return Infinity;
+      return Math.ceil(num / den);
+    }
+
+    function computeRuntime(sampleSizePerGroup, traffic) {
+      return Math.ceil((2 * sampleSizePerGroup) / traffic);
+    }
+
+    function runSingleExperiment(trueLift, sampleSize, baseline, alpha) {
+      const p1 = baseline / 100;
+      const p2 = Math.max(0.0001, p1 * (1 + trueLift / 100));
+      const obsCtrl = Math.max(0, Math.min(1, sampleNormal(p1, Math.sqrt(p1 * (1 - p1) / sampleSize))));
+      const obsTreat = Math.max(0, Math.min(1, sampleNormal(p2, Math.sqrt(p2 * (1 - p2) / sampleSize))));
+      // 1-sided z-test: H1 is treatment > control
+      const pHat = (obsCtrl + obsTreat) / 2;
+      const se = Math.sqrt(2 * pHat * (1 - pHat) / sampleSize);
+      const z = se > 0 ? (obsTreat - obsCtrl) / se : 0;
+      // 1-sided p-value (upper tail)
+      const pValue = 1 - normalCDF(z);
+      const shipped = pValue < alpha;
+      const obsLift = obsCtrl > 0 ? ((obsTreat / obsCtrl) - 1) * 100 : 0;
+      return { trueLift, obsCtrl, obsTreat, obsLift, pValue, shipped };
+    }
+
+    function runYearSimulation(alpha, power, mde, baseline, traffic) {
+      const sampleSize = computeSampleSize(alpha, power, baseline, mde);
+      const runtime = computeRuntime(sampleSize, traffic);
+      if (runtime > 365) return { experiments: [], runtime, sampleSize };
+      let daysUsed = 0;
+      const experiments = [];
+      while (daysUsed + runtime <= 365) {
+        const trueLift = sampleFromLiftDistribution();
+        const result = runSingleExperiment(trueLift, sampleSize, baseline, alpha);
+        result.startDay = daysUsed;
+        result.endDay = daysUsed + runtime;
+        result.runtime = runtime;
+        experiments.push(result);
+        daysUsed += runtime;
+      }
+      return { experiments, runtime, sampleSize };
+    }
+
+    function summarizeYear(experiments) {
+      const total = experiments.length;
+      const positiveTrue = experiments.filter(e => e.trueLift > 0).length;
+      const negativeTrue = experiments.filter(e => e.trueLift < 0).length;
+      const statsig = experiments.filter(e => e.shipped).length;
+      const tp = experiments.filter(e => e.shipped && e.trueLift > 0).length;
+      const fp = experiments.filter(e => e.shipped && e.trueLift <= 0).length;
+      const fpr = statsig > 0 ? fp / statsig : 0;
+      const cumLift = experiments.filter(e => e.shipped).reduce((s, e) => s + e.trueLift, 0);
+      const avgLift = statsig > 0 ? cumLift / statsig : 0;
+      return { total, positiveTrue, negativeTrue, statsig, tp, fp, fpr, cumLift, avgLift };
+    }
+
+    // =====================================================================
+    // STEPPER NAVIGATION (3 steps)
+    // =====================================================================
+    const TOTAL_STEPS = 3;
+    let currentStep = 1;
+    const maxUnlocked = [1];
+
+    function goToStep(n) {
+      for (let i = 1; i <= TOTAL_STEPS; i++) {
+        document.getElementById('step' + i).classList.toggle('active', i === n);
+        const dot = document.getElementById('dot' + i);
+        dot.classList.remove('active', 'completed');
+        if (i < n) dot.classList.add('completed');
+        else if (i === n) dot.classList.add('active');
+        if (i < TOTAL_STEPS) {
+          document.getElementById('conn' + i).classList.toggle('completed', i < n);
+        }
+      }
+      currentStep = n;
+      document.getElementById('takeawaySection').style.display = n === TOTAL_STEPS ? 'block' : 'none';
+    }
+
+    function unlockStep(n) {
+      if (!maxUnlocked.includes(n)) maxUnlocked.push(n);
+      goToStep(n);
+    }
+
+    for (let i = 1; i <= TOTAL_STEPS; i++) {
+      document.getElementById('dot' + i).addEventListener('click', () => {
+        if (maxUnlocked.includes(i)) goToStep(i);
+      });
+    }
+
+    // =====================================================================
+    // STEP 1: LIFT DISTRIBUTION CHART
+    // =====================================================================
+    const ldChart = createChart('#liftDistChart', { height: 280 });
+    addAxisLabels(ldChart, 'True Lift (%)', 'Probability / Density');
+
+    const ldAreaGen = d3.area().x(d => ldChart.x(d.x)).y0(ldChart.height).y1(d => ldChart.y(d.y)).curve(d3.curveBasis);
+    const ldLineGen = d3.line().x(d => ldChart.x(d.x)).y(d => ldChart.y(d.y)).curve(d3.curveBasis);
+
+    const ldArea = ldChart.g.append('path').attr('fill', '#4F46E5').attr('opacity', 0.15);
+    const ldLine = ldChart.g.append('path').attr('fill', 'none').attr('stroke', '#4F46E5').attr('stroke-width', 2);
+    const ldBarsG = ldChart.g.append('g');
+    const ldZeroLine = ldChart.g.append('line').attr('stroke', '#9ca3af').attr('stroke-dasharray', '4 3');
+
+    function updateLiftDistChart() {
+      if (distMode === 'naive') {
+        ldArea.attr('d', null);
+        ldLine.attr('d', null);
+        const flatRate = Math.max(0, 100 - naiveWinRate - naiveLoseRate);
+        const barData = [];
+        if (naiveLoseRate > 0) barData.push({ x: -naiveLoseLift, prob: naiveLoseRate / 100, color: '#EF4444' });
+        if (flatRate > 0) barData.push({ x: 0, prob: flatRate / 100, color: '#9ca3af' });
+        if (naiveWinRate > 0) barData.push({ x: naiveWinLift, prob: naiveWinRate / 100, color: '#059669' });
+
+        const xMin = -naiveLoseLift - 2;
+        const xMax = naiveWinLift + 2;
+        updateAxes(ldChart, [xMin, xMax], [0, 1], { xTicks: 8, xFormat: d3.format('.1f'), yTicks: 5, yFormat: d3.format('.0%') });
+
+        const barW = Math.max((ldChart.x(0.5) - ldChart.x(0)), 8);
+        const bars = ldBarsG.selectAll('rect').data(barData, d => d.x);
+        bars.enter().append('rect').attr('rx', 2)
+          .merge(bars)
+          .attr('x', d => ldChart.x(d.x) - barW / 2)
+          .attr('width', barW)
+          .attr('y', d => ldChart.y(d.prob))
+          .attr('height', d => ldChart.height - ldChart.y(d.prob))
+          .attr('fill', d => d.color);
+        bars.exit().remove();
+
+        ldBarsG.selectAll('text').remove();
+        barData.forEach(d => {
+          ldBarsG.append('text')
+            .attr('x', ldChart.x(d.x))
+            .attr('y', ldChart.y(d.prob) - 6)
+            .attr('text-anchor', 'middle')
+            .attr('font-size', 11)
+            .attr('fill', '#374151')
+            .text((d.prob * 100).toFixed(0) + '%');
+        });
+
+        ldZeroLine.attr('x1', ldChart.x(0)).attr('x2', ldChart.x(0)).attr('y1', 0).attr('y2', ldChart.height);
+      } else {
+        ldBarsG.selectAll('rect').remove();
+        ldBarsG.selectAll('text').remove();
+        let mean, std;
+        if (statDistType === 'normal') { mean = normMean; std = normStd; }
+        else if (statDistType === 'laplace') { mean = lapLoc; std = lapScale * Math.SQRT2; }
+        else { mean = tLoc; std = tDf > 2 ? tScale * Math.sqrt(tDf / (tDf - 2)) : tScale * 4; }
+
+        const spread = statDistType === 't' ? 6 : 4; // t needs wider range for fat tails
+        const xMin = mean - spread * std;
+        const xMax = mean + spread * std;
+        const pts = getDensityCurve(xMin, xMax, 200);
+        const yMax = d3.max(pts, d => d.y) || 1;
+
+        updateAxes(ldChart, [xMin, xMax], [0, yMax * 1.1], { xTicks: 8, xFormat: d3.format('.1f'), yTicks: 5, yFormat: d3.format('.3f') });
+
+        ldArea.datum(pts).attr('d', ldAreaGen);
+        ldLine.datum(pts).attr('d', ldLineGen);
+        ldZeroLine.attr('x1', ldChart.x(0)).attr('x2', ldChart.x(0)).attr('y1', 0).attr('y2', ldChart.height);
+      }
+    }
+
+    // =====================================================================
+    // STEP 2: DESIGN METRICS
+    // =====================================================================
+    function updateDesignMetrics(prefix) {
+      const alpha = parseFloat(document.getElementById('alphaSlider' + prefix).value);
+      const power = parseFloat(document.getElementById('powerSlider' + prefix).value);
+      const mde = parseFloat(document.getElementById('mdeSlider' + prefix).value);
+      const baseline = parseFloat(document.getElementById('baselineSlider' + prefix).value);
+      const traffic = Math.round(Math.pow(10, parseFloat(document.getElementById('trafficSlider' + prefix).value)));
+
+      const n = computeSampleSize(alpha, power, baseline, mde);
+      const runtime = computeRuntime(n, traffic);
+      const expsPerYear = runtime <= 365 ? Math.floor(365 / runtime) : 0;
+
+      if (prefix === '') {
+        document.getElementById('sampleSizeVal').textContent = isFinite(n) ? n.toLocaleString() : '--';
+        document.getElementById('runtimeVal').textContent = runtime > 365 ? '>365' : runtime;
+        document.getElementById('expsPerYear').textContent = expsPerYear;
+        document.getElementById('runtimeWarning').style.display = runtime > 365 ? 'block' : 'none';
+      } else {
+        document.getElementById('ss3').textContent = isFinite(n) ? n.toLocaleString() : '--';
+        document.getElementById('rt3').textContent = runtime > 365 ? '>365' : runtime;
+        document.getElementById('epy3').textContent = expsPerYear;
+        document.getElementById('runtimeWarning3').style.display = runtime > 365 ? 'block' : 'none';
+      }
+    }
+
+    // =====================================================================
+    // STEP 3: YEAR TIMELINE CHART
+    // =====================================================================
+    const ytChart = createChart('#yearTimelineChart', { height: 300, margin: { top: 15, right: 30, bottom: 45, left: 70 } });
+    addAxisLabels(ytChart, 'Day of Year', 'Experiment #');
+
+    function updateYearTimelineChart() {
+      if (yearExperiments.length === 0) return;
+      document.getElementById('yearTimelineWrap').style.display = 'block';
+
+      const n = yearExperiments.length;
+      updateAxes(ytChart, [0, 365], [0, n + 1], {
+        xTicks: 12, xFormat: d3.format('d'), yTicks: Math.min(n, 10), yFormat: d3.format('d')
+      });
+      ytChart.y.domain([n + 1, 0]);
+      ytChart.yAxisG.call(d3.axisLeft(ytChart.y).ticks(Math.min(n, 10)).tickFormat(d3.format('d')));
+
+      const barH = Math.max(ytChart.height / (n + 2) * 0.7, 4);
+      const bars = ytChart.g.selectAll('rect.exp-bar').data(yearExperiments, (d, i) => i);
+      bars.enter().append('rect').attr('class', 'exp-bar').attr('rx', 2)
+        .merge(bars)
+        .attr('x', d => ytChart.x(d.startDay))
+        .attr('width', d => Math.max(ytChart.x(d.endDay) - ytChart.x(d.startDay), 2))
+        .attr('y', (d, i) => ytChart.y(i + 1) - barH / 2)
+        .attr('height', barH)
+        .attr('fill', d => {
+          if (d.shipped && d.trueLift > 0) return '#059669';
+          if (d.shipped && d.trueLift <= 0) return '#EF4444';
+          return '#d1d5db';
+        })
+        .attr('opacity', 0.85);
+      bars.exit().remove();
+
+      ytChart.g.selectAll('.legend').remove();
+      const legendData = [
+        { label: 'True Positive (shipped)', color: '#059669' },
+        { label: 'False Positive (shipped)', color: '#EF4444' },
+        { label: 'Not shipped', color: '#d1d5db' }
+      ];
+      const legend = ytChart.g.append('g').attr('class', 'legend').attr('transform', `translate(${ytChart.width - 180}, -5)`);
+      legendData.forEach((d, i) => {
+        legend.append('rect').attr('x', 0).attr('y', i * 16).attr('width', 10).attr('height', 10).attr('rx', 2).attr('fill', d.color);
+        legend.append('text').attr('x', 14).attr('y', i * 16 + 9).attr('font-size', 10).attr('fill', '#374151').text(d.label);
+      });
+    }
+
+    // =====================================================================
+    // STEP 3: CUMULATIVE LIFT CHART
+    // =====================================================================
+    const clChart = createChart('#yearLiftChart', { height: 260 });
+    addAxisLabels(clChart, 'Experiment #', 'Cumulative True Lift (%)');
+    const clLineGen = d3.line().x(d => clChart.x(d.x)).y(d => clChart.y(d.y)).curve(d3.curveStepAfter);
+    const clPath = clChart.g.append('path').attr('fill', 'none').attr('stroke', '#4F46E5').attr('stroke-width', 2);
+    const clZeroLine = clChart.g.append('line').attr('stroke', '#9ca3af').attr('stroke-dasharray', '4 3');
+    const clDots = clChart.g.append('g');
+
+    function updateCumLiftChart() {
+      if (yearExperiments.length === 0) return;
+      document.getElementById('yearLiftWrap').style.display = 'block';
+
+      let cumLift = 0;
+      const data = [{ x: 0, y: 0 }];
+      yearExperiments.forEach((e, i) => {
+        if (e.shipped) cumLift += e.trueLift;
+        data.push({ x: i + 1, y: cumLift, shipped: e.shipped, trueLift: e.trueLift });
+      });
+
+      const yMin = Math.min(0, d3.min(data, d => d.y));
+      const yMax = Math.max(0, d3.max(data, d => d.y));
+      const yPad = Math.max((yMax - yMin) * 0.15, 0.5);
+
+      updateAxes(clChart, [0, yearExperiments.length], [yMin - yPad, yMax + yPad], {
+        xTicks: Math.min(yearExperiments.length, 12), xFormat: d3.format('d'),
+        yTicks: 6, yFormat: d3.format('.1f')
+      });
+
+      clPath.datum(data).attr('d', clLineGen);
+      clZeroLine.attr('x1', 0).attr('x2', clChart.width).attr('y1', clChart.y(0)).attr('y2', clChart.y(0));
+
+      const dots = clDots.selectAll('circle').data(data.slice(1), (d, i) => i);
+      dots.enter().append('circle').attr('r', 3).attr('stroke', '#fff').attr('stroke-width', 1)
+        .merge(dots)
+        .attr('cx', d => clChart.x(d.x))
+        .attr('cy', d => clChart.y(d.y))
+        .attr('fill', d => d.shipped ? (d.trueLift > 0 ? '#059669' : '#EF4444') : '#d1d5db');
+      dots.exit().remove();
+    }
+
+    // =====================================================================
+    // STEP 3: MULTI-YEAR HISTOGRAM
+    // =====================================================================
+    const myChart = createChart('#multiYearChart', { height: 260 });
+    addAxisLabels(myChart, 'Cumulative True Lift (%)', 'Count');
+    const myBarsG = myChart.g.append('g');
+    const myZeroLine = myChart.g.append('line').attr('stroke', '#EF4444').attr('stroke-width', 1.5).attr('stroke-dasharray', '6 3');
+
+    function updateMultiYearChart() {
+      if (multiYearResults.length === 0) return;
+      document.getElementById('multiYearSection').style.display = 'block';
+
+      const lifts = multiYearResults.map(r => r.cumLift);
+      const minLift = d3.min(lifts);
+      const maxLift = d3.max(lifts);
+      const range = maxLift - minLift || 1;
+      const binW = range / 20;
+      const bins = new Array(20).fill(0);
+      lifts.forEach(l => {
+        const idx = Math.min(Math.floor((l - minLift) / binW), 19);
+        bins[idx]++;
+      });
+      const maxCount = d3.max(bins);
+
+      updateAxes(myChart, [minLift, maxLift], [0, maxCount * 1.1], {
+        xTicks: 8, xFormat: d3.format('.1f'), yTicks: 5, yFormat: d3.format('d')
+      });
+
+      const barData = bins.map((c, i) => ({
+        idx: i, count: c, xStart: minLift + i * binW, xEnd: minLift + (i + 1) * binW
+      }));
+
+      const bars = myBarsG.selectAll('rect').data(barData, d => d.idx);
+      bars.enter().append('rect').attr('rx', 1)
+        .merge(bars)
+        .attr('x', d => myChart.x(d.xStart) + 1)
+        .attr('width', d => Math.max(myChart.x(d.xEnd) - myChart.x(d.xStart) - 2, 1))
+        .attr('y', d => myChart.y(d.count))
+        .attr('height', d => myChart.height - myChart.y(d.count))
+        .attr('fill', d => {
+          const mid = (d.xStart + d.xEnd) / 2;
+          return mid >= 0 ? '#4F46E5' : '#EF4444';
+        })
+        .attr('opacity', 0.75);
+      bars.exit().remove();
+
+      if (minLift < 0 && maxLift > 0) {
+        myZeroLine.attr('x1', myChart.x(0)).attr('x2', myChart.x(0)).attr('y1', 0).attr('y2', myChart.height);
+      }
+
+      const sorted = [...lifts].sort((a, b) => a - b);
+      const median = sorted[Math.floor(sorted.length / 2)];
+      const mean = lifts.reduce((a, b) => a + b, 0) / lifts.length;
+      const pctPos = lifts.filter(l => l > 0).length / lifts.length * 100;
+      document.getElementById('myMedian').textContent = median.toFixed(2) + '%';
+      document.getElementById('myMean').textContent = mean.toFixed(2) + '%';
+      document.getElementById('myPctPos').textContent = pctPos.toFixed(0) + '%';
+    }
+
+    function updateYearMetrics(summary) {
+      document.getElementById('yearMetrics').style.display = 'block';
+      document.getElementById('ymTotal').textContent = summary.total;
+      document.getElementById('ymPositive').textContent = summary.positiveTrue;
+      document.getElementById('ymNegative').textContent = summary.negativeTrue;
+      document.getElementById('ymStatsig').textContent = summary.statsig;
+      document.getElementById('ymTP').textContent = summary.tp;
+      document.getElementById('ymFP').textContent = summary.fp;
+      document.getElementById('ymFPR').textContent = summary.statsig > 0 ? (summary.fpr * 100).toFixed(1) + '%' : 'N/A';
+      document.getElementById('ymCumLift').textContent = summary.cumLift.toFixed(2) + '%';
+      document.getElementById('ymCumLift').className = 'metric-value ' + (summary.cumLift >= 0 ? 'result-positive' : 'result-negative');
+      document.getElementById('ymAvgLift').textContent = summary.statsig > 0 ? summary.avgLift.toFixed(2) + '%' : 'N/A';
+    }
+
+    // =====================================================================
+    // EVENT WIRING
+    // =====================================================================
+
+    // --- Step 1: Distribution toggles & sliders ---
+    document.querySelectorAll('#distModeToggle .toggle-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#distModeToggle .toggle-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        distMode = btn.dataset.mode;
+        document.getElementById('naivePanel').classList.toggle('visible', distMode === 'naive');
+        document.getElementById('statPanel').classList.toggle('visible', distMode === 'statistical');
+        updateLiftDistChart();
+      });
+    });
+
+    document.querySelectorAll('#statDistToggle .toggle-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#statDistToggle .toggle-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        statDistType = btn.dataset.dist;
+        document.getElementById('normalParams').classList.toggle('visible', statDistType === 'normal');
+        document.getElementById('laplaceParams').classList.toggle('visible', statDistType === 'laplace');
+        document.getElementById('tParams').classList.toggle('visible', statDistType === 't');
+        updateLiftDistChart();
+      });
+    });
+
+    function updateFlatRate() {
+      document.getElementById('flatRateValue').textContent = Math.max(0, 100 - naiveWinRate - naiveLoseRate);
+    }
+
+    document.getElementById('winRate').addEventListener('input', function() {
+      naiveWinRate = parseInt(this.value);
+      if (naiveWinRate + naiveLoseRate > 100) {
+        naiveLoseRate = 100 - naiveWinRate;
+        document.getElementById('loseRate').value = naiveLoseRate;
+        document.getElementById('loseRateValue').textContent = naiveLoseRate;
+      }
+      document.getElementById('winRateValue').textContent = naiveWinRate;
+      updateFlatRate(); updateLiftDistChart();
+    });
+    document.getElementById('winLift').addEventListener('input', function() {
+      naiveWinLift = parseFloat(this.value);
+      document.getElementById('winLiftValue').textContent = naiveWinLift.toFixed(1);
+      updateLiftDistChart();
+    });
+    document.getElementById('loseRate').addEventListener('input', function() {
+      naiveLoseRate = parseInt(this.value);
+      if (naiveWinRate + naiveLoseRate > 100) {
+        naiveWinRate = 100 - naiveLoseRate;
+        document.getElementById('winRate').value = naiveWinRate;
+        document.getElementById('winRateValue').textContent = naiveWinRate;
+      }
+      document.getElementById('loseRateValue').textContent = naiveLoseRate;
+      updateFlatRate(); updateLiftDistChart();
+    });
+    document.getElementById('loseLift').addEventListener('input', function() {
+      naiveLoseLift = parseFloat(this.value);
+      document.getElementById('loseLiftValue').textContent = naiveLoseLift.toFixed(1);
+      updateLiftDistChart();
+    });
+
+    document.getElementById('normMean').addEventListener('input', function() {
+      normMean = parseFloat(this.value);
+      document.getElementById('normMeanValue').textContent = normMean.toFixed(1);
+      updateLiftDistChart();
+    });
+    document.getElementById('normStd').addEventListener('input', function() {
+      normStd = parseFloat(this.value);
+      document.getElementById('normStdValue').textContent = normStd.toFixed(1);
+      updateLiftDistChart();
+    });
+    document.getElementById('lapLoc').addEventListener('input', function() {
+      lapLoc = parseFloat(this.value);
+      document.getElementById('lapLocValue').textContent = lapLoc.toFixed(1);
+      updateLiftDistChart();
+    });
+    document.getElementById('lapScale').addEventListener('input', function() {
+      lapScale = parseFloat(this.value);
+      document.getElementById('lapScaleValue').textContent = lapScale.toFixed(1);
+      updateLiftDistChart();
+    });
+
+    document.getElementById('tLoc').addEventListener('input', function() {
+      tLoc = parseFloat(this.value);
+      document.getElementById('tLocValue').textContent = tLoc.toFixed(1);
+      updateLiftDistChart();
+    });
+    document.getElementById('tScale').addEventListener('input', function() {
+      tScale = parseFloat(this.value);
+      document.getElementById('tScaleValue').textContent = tScale.toFixed(1);
+      updateLiftDistChart();
+    });
+    document.getElementById('tDf').addEventListener('input', function() {
+      tDf = parseFloat(this.value);
+      document.getElementById('tDfValue').textContent = tDf.toFixed(1);
+      updateLiftDistChart();
+    });
+
+    // --- Naive presets ---
+    const NAIVE_PRESETS = {
+      mature: { winRate: 15, winLift: 1, loseRate: 20, loseLift: 1,
+        source: 'Source: Kohavi &amp; Thomke, HBR 2017 &mdash; &ldquo;10&ndash;20% of experiments generate positive results&rdquo; at Google/Bing' },
+      typical: { winRate: 33, winLift: 2, loseRate: 33, loseLift: 2,
+        source: 'Source: Kohavi &amp; Thomke, HBR 2017 &mdash; &ldquo;one-third positive, one-third neutral, one-third negative&rdquo;' },
+      cro: { winRate: 35, winLift: 5, loseRate: 15, loseLift: 3,
+        source: 'Source: Georgiev, Analytics Toolkit 2018 &mdash; 115 A/B tests, ~39% winners, mean lift ~4%' },
+      custom: null
+    };
+
+    function applyNaivePreset(key) {
+      document.querySelectorAll('#naivePresets .preset-btn').forEach(b => b.classList.remove('active'));
+      document.querySelector(`#naivePresets [data-preset="${key}"]`).classList.add('active');
+      const p = NAIVE_PRESETS[key];
+      if (!p) {
+        document.getElementById('presetSource').innerHTML = 'Custom configuration';
+        return;
+      }
+      naiveWinRate = p.winRate; naiveWinLift = p.winLift;
+      naiveLoseRate = p.loseRate; naiveLoseLift = p.loseLift;
+      document.getElementById('winRate').value = naiveWinRate;
+      document.getElementById('winRateValue').textContent = naiveWinRate;
+      document.getElementById('winLift').value = naiveWinLift;
+      document.getElementById('winLiftValue').textContent = naiveWinLift.toFixed(1);
+      document.getElementById('loseRate').value = naiveLoseRate;
+      document.getElementById('loseRateValue').textContent = naiveLoseRate;
+      document.getElementById('loseLift').value = naiveLoseLift;
+      document.getElementById('loseLiftValue').textContent = naiveLoseLift.toFixed(1);
+      updateFlatRate();
+      document.getElementById('presetSource').innerHTML = p.source;
+      updateLiftDistChart();
+    }
+
+    document.querySelectorAll('#naivePresets .preset-btn').forEach(btn => {
+      btn.addEventListener('click', () => applyNaivePreset(btn.dataset.preset));
+    });
+
+    // Switch to custom when sliders are manually adjusted
+    ['winRate', 'winLift', 'loseRate', 'loseLift'].forEach(id => {
+      document.getElementById(id).addEventListener('input', () => {
+        document.querySelectorAll('#naivePresets .preset-btn').forEach(b => b.classList.remove('active'));
+        document.querySelector('#naivePresets [data-preset="custom"]').classList.add('active');
+        document.getElementById('presetSource').innerHTML = 'Custom configuration';
+      });
+    });
+
+    document.getElementById('confirmDist').addEventListener('click', () => {
+      unlockStep(2);
+      updateDesignMetrics('');
+    });
+
+    // --- Step 2: Design sliders ---
+    ['alphaSlider', 'powerSlider', 'mdeSlider', 'baselineSlider', 'trafficSlider'].forEach(id => {
+      document.getElementById(id).addEventListener('input', function() {
+        if (id === 'alphaSlider') document.getElementById('alphaValue').textContent = parseFloat(this.value).toFixed(2);
+        else if (id === 'powerSlider') document.getElementById('powerValue').textContent = parseFloat(this.value).toFixed(2);
+        else if (id === 'mdeSlider') document.getElementById('mdeValue').textContent = parseFloat(this.value).toFixed(1);
+        else if (id === 'baselineSlider') document.getElementById('baselineValue').textContent = parseFloat(this.value).toFixed(1);
+        else if (id === 'trafficSlider') {
+          document.getElementById('trafficValue').textContent = Math.round(Math.pow(10, parseFloat(this.value))).toLocaleString();
+        }
+        updateDesignMetrics('');
+      });
+    });
+
+    document.getElementById('confirmDesign').addEventListener('click', () => {
+      // Sync step 3 sliders from step 2
+      document.getElementById('alphaSlider3').value = document.getElementById('alphaSlider').value;
+      document.getElementById('alphaValue3').textContent = document.getElementById('alphaValue').textContent;
+      document.getElementById('powerSlider3').value = document.getElementById('powerSlider').value;
+      document.getElementById('powerValue3').textContent = document.getElementById('powerValue').textContent;
+      document.getElementById('mdeSlider3').value = document.getElementById('mdeSlider').value;
+      document.getElementById('mdeValue3').textContent = document.getElementById('mdeValue').textContent;
+      document.getElementById('baselineSlider3').value = document.getElementById('baselineSlider').value;
+      document.getElementById('baselineValue3').textContent = document.getElementById('baselineValue').textContent;
+      document.getElementById('trafficSlider3').value = document.getElementById('trafficSlider').value;
+      document.getElementById('trafficValue3').textContent = document.getElementById('trafficValue').textContent;
+      updateDesignMetrics('3');
+      unlockStep(3);
+    });
+
+    // --- Step 3: Design sliders (for rapid iteration) ---
+    ['alphaSlider3', 'powerSlider3', 'mdeSlider3', 'baselineSlider3', 'trafficSlider3'].forEach(id => {
+      document.getElementById(id).addEventListener('input', function() {
+        if (id === 'alphaSlider3') document.getElementById('alphaValue3').textContent = parseFloat(this.value).toFixed(2);
+        else if (id === 'powerSlider3') document.getElementById('powerValue3').textContent = parseFloat(this.value).toFixed(2);
+        else if (id === 'mdeSlider3') document.getElementById('mdeValue3').textContent = parseFloat(this.value).toFixed(1);
+        else if (id === 'baselineSlider3') document.getElementById('baselineValue3').textContent = parseFloat(this.value).toFixed(1);
+        else if (id === 'trafficSlider3') {
+          document.getElementById('trafficValue3').textContent = Math.round(Math.pow(10, parseFloat(this.value))).toLocaleString();
+        }
+        updateDesignMetrics('3');
+      });
+    });
+
+    function getStep3Params() {
+      return {
+        alpha: parseFloat(document.getElementById('alphaSlider3').value),
+        power: parseFloat(document.getElementById('powerSlider3').value),
+        mde: parseFloat(document.getElementById('mdeSlider3').value),
+        baseline: parseFloat(document.getElementById('baselineSlider3').value),
+        traffic: Math.round(Math.pow(10, parseFloat(document.getElementById('trafficSlider3').value)))
+      };
+    }
+
+    // --- Step 3: Simulation buttons ---
+    document.getElementById('runYear').addEventListener('click', () => {
+      const p = getStep3Params();
+      const result = runYearSimulation(p.alpha, p.power, p.mde, p.baseline, p.traffic);
+      yearExperiments = result.experiments;
+      if (yearExperiments.length === 0) {
+        document.getElementById('yearMetrics').style.display = 'block';
+        document.getElementById('ymTotal').textContent = '0';
+        ['ymPositive','ymNegative','ymStatsig','ymTP','ymFP','ymFPR','ymAvgLift'].forEach(id => {
+          document.getElementById(id).textContent = '—';
+        });
+        document.getElementById('ymCumLift').textContent = 'Runtime > 365d';
+        document.getElementById('ymCumLift').className = 'metric-value result-negative';
+        document.getElementById('yearTimelineWrap').style.display = 'none';
+        document.getElementById('yearLiftWrap').style.display = 'none';
+        return;
+      }
+      const summary = summarizeYear(yearExperiments);
+      updateYearMetrics(summary);
+      ytChart.g.selectAll('rect.exp-bar').remove();
+      ytChart.g.selectAll('.legend').remove();
+      clDots.selectAll('circle').remove();
+      updateYearTimelineChart();
+      updateCumLiftChart();
+    });
+
+    document.getElementById('runYearMany').addEventListener('click', () => {
+      const p = getStep3Params();
+      multiYearResults = [];
+      for (let i = 0; i < 100; i++) {
+        const result = runYearSimulation(p.alpha, p.power, p.mde, p.baseline, p.traffic);
+        multiYearResults.push(summarizeYear(result.experiments));
+      }
+      // Also show the last single year
+      const lastResult = runYearSimulation(p.alpha, p.power, p.mde, p.baseline, p.traffic);
+      yearExperiments = lastResult.experiments;
+      if (yearExperiments.length > 0) {
+        const summary = summarizeYear(yearExperiments);
+        updateYearMetrics(summary);
+        ytChart.g.selectAll('rect.exp-bar').remove();
+        ytChart.g.selectAll('.legend').remove();
+        clDots.selectAll('circle').remove();
+        updateYearTimelineChart();
+        updateCumLiftChart();
+      }
+      myBarsG.selectAll('rect').remove();
+      updateMultiYearChart();
+    });
+
+    document.getElementById('resetYear').addEventListener('click', () => {
+      yearExperiments = [];
+      multiYearResults = [];
+      document.getElementById('yearMetrics').style.display = 'none';
+      document.getElementById('yearTimelineWrap').style.display = 'none';
+      document.getElementById('yearLiftWrap').style.display = 'none';
+      document.getElementById('multiYearSection').style.display = 'none';
+      ytChart.g.selectAll('rect.exp-bar').remove();
+      ytChart.g.selectAll('.legend').remove();
+      clDots.selectAll('circle').remove();
+      myBarsG.selectAll('rect').remove();
+    });
+
+    // =====================================================================
+    // INITIAL RENDER
+    // =====================================================================
+    updateLiftDistChart();
+  </script>
+</body>
+</html>
