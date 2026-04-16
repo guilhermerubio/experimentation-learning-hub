@@ -143,6 +143,7 @@
     <div class="chart-actions"><button id="runMulti">Run Simulations</button></div>
     <div class="chart-wrap" id="multiWrap">
       <div id="multiChart"></div>
+      <div class="tooltip-d3" id="multiTooltip"></div>
     </div>
 
     <section class="takeaway">
@@ -197,7 +198,6 @@
     // --- Distribution Chart (uses shared utils) ---
     const dc = createChart('#distChart');
     addAxisLabels(dc, '% Heads', 'Count');
-    dc.x.domain([0, 100]);
 
     const barsG = dc.g.append('g');
     const refLineD = dc.g.append('line').attr('stroke','#EF4444').attr('stroke-width',2).attr('stroke-dasharray','8 4');
@@ -206,14 +206,38 @@
     const meanLabelD = dc.g.append('text').attr('fill','#10B981').attr('font-size',12).attr('text-anchor','middle').style('opacity',0);
     const dTooltip = document.getElementById('distTooltip');
 
-    const BIN_W = 2, NUM_BINS = 50;
+    const NUM_BINS = 40;
+
+    function computeDistRange() {
+      const biasPct = bias * 100;
+      const theoStd = Math.sqrt(bias * (1 - bias) / numTosses) * 100;
+      const pad = Math.max(theoStd * 4, 1);
+      let lo = biasPct - pad, hi = biasPct + pad;
+      if (trialResults.length > 0) {
+        const dMin = Math.min(...trialResults);
+        const dMax = Math.max(...trialResults);
+        lo = Math.min(lo, dMin - theoStd * 0.5);
+        hi = Math.max(hi, dMax + theoStd * 0.5);
+      }
+      lo = Math.max(0, lo); hi = Math.min(100, hi);
+      if (hi - lo < 0.5) { const m = (hi + lo) / 2; lo = Math.max(0, m - 0.25); hi = Math.min(100, m + 0.25); }
+      return [lo, hi];
+    }
 
     function updateDistChart() {
       const biasPct = bias * 100, count = trialResults.length;
       document.getElementById('trialCount').textContent = count.toLocaleString();
 
+      const [xMin, xMax] = computeDistRange();
+      const binW = (xMax - xMin) / NUM_BINS;
+      const range = xMax - xMin;
+      const decimals = range < 2 ? 3 : (range < 10 ? 2 : (range < 40 ? 1 : 0));
+
       const bins = new Array(NUM_BINS).fill(0);
-      trialResults.forEach(v => bins[Math.min(Math.floor(v / BIN_W), NUM_BINS - 1)]++);
+      trialResults.forEach(v => {
+        const idx = Math.floor((v - xMin) / binW);
+        if (idx >= 0 && idx < NUM_BINS) bins[idx]++;
+      });
       const maxCount = d3.max(bins) || 1;
 
       let m = 0, s = 0;
@@ -221,50 +245,55 @@
         m = trialResults.reduce((a, b) => a + b, 0) / count;
         s = Math.sqrt(trialResults.reduce((a, b) => a + (b - m) ** 2, 0) / count);
       }
-      document.getElementById('trialMean').textContent = count ? m.toFixed(1) + '%' : '—';
-      document.getElementById('trialStd').textContent = count ? s.toFixed(2) + '%' : '—';
+      document.getElementById('trialMean').textContent = count ? m.toFixed(Math.max(1, decimals)) + '%' : '—';
+      document.getElementById('trialStd').textContent = count ? s.toFixed(Math.max(2, decimals)) + '%' : '—';
 
       if (count > 0) {
-        document.getElementById('lastSampleValue').textContent = trialResults[count - 1].toFixed(1) + '%';
+        document.getElementById('lastSampleValue').textContent = trialResults[count - 1].toFixed(Math.max(1, decimals)) + '%';
         document.getElementById('lastSample').style.display = 'inline-block';
       } else {
         document.getElementById('lastSample').style.display = 'none';
       }
 
-      updateAxes(dc, [0, 100], [0, Math.max(maxCount, 1)], { xFormat: d => d + '%' });
+      updateAxes(dc, [xMin, xMax], [0, Math.max(maxCount, 1)], { xFormat: d => d.toFixed(decimals) + '%' });
 
-      const lastBin = count > 0 ? Math.min(Math.floor(trialResults[count - 1] / BIN_W), NUM_BINS - 1) : -1;
-      const barData = bins.map((c, i) => ({ idx: i, count: c, center: i * BIN_W + BIN_W / 2 }));
+      let lastBin = -1;
+      if (count > 0) {
+        const li = Math.floor((trialResults[count - 1] - xMin) / binW);
+        if (li >= 0 && li < NUM_BINS) lastBin = li;
+      }
+      const barData = bins.map((c, i) => ({ idx: i, count: c, lo: xMin + i * binW, hi: xMin + (i + 1) * binW, center: xMin + i * binW + binW / 2 }));
       const t = d3.transition().duration(200);
 
       const bars = barsG.selectAll('rect').data(barData, d => d.idx);
       bars.enter().append('rect')
-        .attr('x', d => dc.x(d.idx * BIN_W) + 1)
-        .attr('width', Math.max(dc.x(BIN_W) - dc.x(0) - 2, 1))
+        .attr('x', d => dc.x(d.lo) + 1)
+        .attr('width', Math.max(dc.x(xMin + binW) - dc.x(xMin) - 2, 1))
         .attr('y', dc.height).attr('height', 0).attr('rx', 1)
         .on('mousemove', function(event, d) {
           const wr = document.getElementById('distWrap').getBoundingClientRect();
           const cr = document.getElementById('distChart').getBoundingClientRect();
           dTooltip.style.opacity = '1';
-          dTooltip.innerHTML = `${d.idx * BIN_W}–${(d.idx + 1) * BIN_W}% heads<br>Count: ${d.count}`;
+          dTooltip.innerHTML = `${d.lo.toFixed(decimals)}–${d.hi.toFixed(decimals)}% heads<br>Count: ${d.count}`;
           dTooltip.style.left = (cr.left - wr.left + dc.margin.left + dc.x(d.center) + 12) + 'px';
           dTooltip.style.top = (cr.top - wr.top + dc.margin.top + dc.y(d.count) - 30) + 'px';
         })
         .on('mouseleave', () => dTooltip.style.opacity = '0')
         .merge(bars).transition(t)
-        .attr('x', d => dc.x(d.idx * BIN_W) + 1)
-        .attr('width', Math.max(dc.x(BIN_W) - dc.x(0) - 2, 1))
+        .attr('x', d => dc.x(d.lo) + 1)
+        .attr('width', Math.max(dc.x(xMin + binW) - dc.x(xMin) - 2, 1))
         .attr('y', d => dc.y(d.count))
         .attr('height', d => dc.height - dc.y(d.count))
         .attr('fill', d => d.idx === lastBin ? '#818CF8' : '#4F46E5')
         .attr('stroke', '#3730A3').attr('stroke-width', 0.5);
       bars.exit().remove();
 
-      refLineD.attr('x1', dc.x(biasPct)).attr('x2', dc.x(biasPct)).attr('y1', 0).attr('y2', dc.height);
-      refLabelD.attr('x', dc.x(biasPct)).attr('y', -4).text(`True: ${biasPct.toFixed(0)}%`);
+      const biasVisible = biasPct >= xMin && biasPct <= xMax;
+      refLineD.attr('x1', dc.x(biasPct)).attr('x2', dc.x(biasPct)).attr('y1', 0).attr('y2', dc.height).style('opacity', biasVisible ? 1 : 0);
+      refLabelD.attr('x', dc.x(biasPct)).attr('y', -4).text(`True: ${biasPct.toFixed(decimals)}%`).style('opacity', biasVisible ? 1 : 0);
       if (count > 0) {
         meanLineD.attr('x1', dc.x(m)).attr('x2', dc.x(m)).attr('y1', 0).attr('y2', dc.height).style('opacity', 1);
-        meanLabelD.attr('x', dc.x(m)).attr('y', 12).text(`Mean: ${m.toFixed(1)}%`).style('opacity', 1);
+        meanLabelD.attr('x', dc.x(m)).attr('y', 12).text(`Mean: ${m.toFixed(Math.max(1, decimals))}%`).style('opacity', 1);
       } else { meanLineD.style('opacity', 0); meanLabelD.style('opacity', 0); }
     }
 
@@ -390,9 +419,27 @@
     const mc = createChart('#multiChart', { height: 400 });
     addAxisLabels(mc, 'Day', 'Observed Lift');
 
+    const multiBandsG = mc.g.append('g');
     const multiLinesG = mc.g.append('g');
+    const multiMedianG = mc.g.append('g');
     const multiRefL = mc.g.append('line').attr('stroke', '#000').attr('stroke-width', 2.5).attr('stroke-dasharray', '10 5');
     const multiRefTxt = mc.g.append('text').attr('fill', '#000').attr('font-size', 13).attr('font-weight', '600').attr('text-anchor', 'end');
+
+    const multiHoverL = mc.g.append('line').attr('stroke', '#6b7280').attr('stroke-dasharray', '4 3').style('opacity', 0).style('pointer-events', 'none');
+    const multiHoverDot = mc.g.append('circle').attr('r', 5).attr('fill', '#7C3AED').attr('stroke', '#fff').attr('stroke-width', 2).style('opacity', 0).style('pointer-events', 'none');
+    const multiOverlay = mc.g.append('rect').attr('width', mc.width).attr('height', mc.height).attr('fill', 'none').attr('pointer-events', 'all');
+    const multiTip = document.getElementById('multiTooltip');
+
+    const multiLegend = mc.g.append('g').attr('transform', `translate(${mc.width - 200}, 10)`).style('font-size', '11px');
+    multiLegend.append('rect').attr('x',0).attr('y',0).attr('width',18).attr('height',10).attr('fill','#818CF8').attr('fill-opacity', 0.25);
+    multiLegend.append('text').attr('x',24).attr('y',9).text('10–90 percentile');
+    multiLegend.append('rect').attr('x',0).attr('y',16).attr('width',18).attr('height',10).attr('fill','#4F46E5').attr('fill-opacity', 0.3);
+    multiLegend.append('text').attr('x',24).attr('y',25).text('25–75 percentile');
+    multiLegend.append('line').attr('x1',0).attr('y1',37).attr('x2',18).attr('y2',37).attr('stroke','#4F46E5').attr('stroke-width',2.5);
+    multiLegend.append('text').attr('x',24).attr('y',41).text('Median');
+
+    let multiSims = [];
+    let multiAbDays = 0;
 
     function runSingleAB() {
       const cvrC = baseCvrPct / 100;
@@ -433,31 +480,94 @@
       const cvrC = baseCvrPct / 100;
       const cvrV = cvrC * (1 + trueLiftPct / 100);
 
-      const allSims = [];
+      multiSims = [];
+      multiAbDays = abDays;
       let gMin = Infinity, gMax = -Infinity;
       for (let i = 0; i < nSims; i++) {
         const data = simOneAB(cvrC, cvrV, vpd, abDays);
         const series = data.map(d => ({ x: d.day, y: d.obsLift * 100 }));
-        allSims.push(series);
+        multiSims.push(series);
         series.forEach(d => { if (d.y < gMin) gMin = d.y; if (d.y > gMax) gMax = d.y; });
       }
+
+      const perDay = [];
+      for (let day = 0; day < abDays; day++) {
+        const vals = multiSims.map(s => s[day].y).sort((a, b) => a - b);
+        perDay.push({
+          day: day + 1,
+          p10: d3.quantile(vals, 0.10),
+          p25: d3.quantile(vals, 0.25),
+          p50: d3.quantile(vals, 0.50),
+          p75: d3.quantile(vals, 0.75),
+          p90: d3.quantile(vals, 0.90),
+        });
+      }
+
       gMin = Math.min(gMin, trueLiftPct);
       gMax = Math.max(gMax, trueLiftPct);
       const pad = Math.max((gMax - gMin) * 0.08, 2);
-
       updateAxes(mc, [1, abDays], [gMin - pad, gMax + pad], { yFormat: d => d.toFixed(0) + '%' });
 
+      multiBandsG.selectAll('*').remove();
+      multiLinesG.selectAll('*').remove();
+      multiMedianG.selectAll('*').remove();
+
+      const area90 = d3.area().x(d => mc.x(d.day)).y0(d => mc.y(d.p10)).y1(d => mc.y(d.p90));
+      const area50 = d3.area().x(d => mc.x(d.day)).y0(d => mc.y(d.p25)).y1(d => mc.y(d.p75));
+      multiBandsG.append('path').datum(perDay).attr('fill', '#818CF8').attr('fill-opacity', 0.2).attr('d', area90);
+      multiBandsG.append('path').datum(perDay).attr('fill', '#4F46E5').attr('fill-opacity', 0.25).attr('d', area50);
+
       const mLineGen = d3.line().x(d => mc.x(d.x)).y(d => mc.y(d.y));
-      multiLinesG.selectAll('path').remove();
-      allSims.forEach(series => {
+      multiSims.forEach((series, i) => {
         multiLinesG.append('path').datum(series)
-          .attr('fill', 'none').attr('stroke', '#555').attr('stroke-width', 1).attr('stroke-opacity', 0.2)
+          .attr('class', 'sim-line')
+          .attr('data-idx', i)
+          .attr('fill', 'none').attr('stroke', '#4F46E5').attr('stroke-width', 1).attr('stroke-opacity', 0.12)
           .attr('d', mLineGen);
       });
 
-      multiRefL.attr('x1', mc.x(1)).attr('x2', mc.x(abDays)).attr('y1', mc.y(trueLiftPct)).attr('y2', mc.y(trueLiftPct));
-      multiRefTxt.attr('x', mc.x(abDays)).attr('y', mc.y(trueLiftPct) - 8).text(`True Lift = ${trueLiftPct.toFixed(1)}%`);
+      const medGen = d3.line().x(d => mc.x(d.day)).y(d => mc.y(d.p50));
+      multiMedianG.append('path').datum(perDay).attr('fill', 'none').attr('stroke', '#4F46E5').attr('stroke-width', 2.5).attr('d', medGen);
+
+      multiRefL.attr('x1', mc.x(1)).attr('x2', mc.x(abDays)).attr('y1', mc.y(trueLiftPct)).attr('y2', mc.y(trueLiftPct)).raise();
+      multiRefTxt.attr('x', mc.x(abDays)).attr('y', mc.y(trueLiftPct) - 8).text(`True Lift = ${trueLiftPct.toFixed(1)}%`).raise();
+      multiLegend.raise();
+      multiHoverL.raise();
+      multiHoverDot.raise();
+      multiOverlay.raise();
     }
+
+    multiOverlay.on('mousemove', function(event) {
+      if (!multiSims.length) return;
+      const [mx, my] = d3.pointer(event);
+      const day = Math.max(1, Math.min(Math.round(mc.x.invert(mx)), multiAbDays));
+      const mouseY = mc.y.invert(my);
+      let bestIdx = 0, bestDist = Infinity;
+      multiSims.forEach((s, i) => {
+        const d = Math.abs(s[day - 1].y - mouseY);
+        if (d < bestDist) { bestDist = d; bestIdx = i; }
+      });
+      const bestY = multiSims[bestIdx][day - 1].y;
+
+      multiLinesG.selectAll('.sim-line').attr('stroke-opacity', 0.08).attr('stroke', '#4F46E5').attr('stroke-width', 1);
+      multiLinesG.select(`.sim-line[data-idx="${bestIdx}"]`).attr('stroke', '#7C3AED').attr('stroke-opacity', 1).attr('stroke-width', 2).raise();
+
+      multiHoverL.attr('x1', mc.x(day)).attr('x2', mc.x(day)).attr('y1', 0).attr('y2', mc.height).style('opacity', 1);
+      multiHoverDot.attr('cx', mc.x(day)).attr('cy', mc.y(bestY)).style('opacity', 1);
+
+      const wr = document.getElementById('multiWrap').getBoundingClientRect();
+      const cr = document.querySelector('#multiChart svg').getBoundingClientRect();
+      multiTip.style.opacity = '1';
+      multiTip.innerHTML = `Sim #${bestIdx + 1} &bull; Day ${day}<br>Observed Lift: ${bestY >= 0 ? '+' : ''}${bestY.toFixed(2)}%`;
+      multiTip.style.left = (cr.left - wr.left + mc.margin.left + mc.x(day) + 12) + 'px';
+      multiTip.style.top = (cr.top - wr.top + mc.margin.top + mc.y(bestY) - 30) + 'px';
+    });
+    multiOverlay.on('mouseleave', function() {
+      multiLinesG.selectAll('.sim-line').attr('stroke-opacity', 0.12).attr('stroke', '#4F46E5').attr('stroke-width', 1);
+      multiHoverL.style('opacity', 0);
+      multiHoverDot.style('opacity', 0);
+      multiTip.style.opacity = '0';
+    });
 
     // --- A/B Slider Wiring ---
     document.getElementById('baseCvr').addEventListener('input', function() {

@@ -22,6 +22,10 @@
     .preset-btn:hover { border-color: #4F46E5; color: #4F46E5; }
     .preset-btn.active { background: #EEF2FF; border-color: #4F46E5; color: #4F46E5; font-weight: 600; }
     .preset-source { font-size: 0.75rem; color: #9ca3af; margin-top: -0.5rem; margin-bottom: 1rem; }
+    .metrics-subhead { font-size: 0.95rem; font-weight: 600; color: #374151; margin: 1.75rem 0 0.5rem; display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
+    .metrics-subhead .tally { font-size: 0.85rem; font-weight: 500; color: #6b7280; }
+    .metric-value.band-harm { color: #EF4444; }
+    .metric-value.band-big { color: #059669; }
     @media (max-width: 600px) {
       .metrics-4, .metrics { grid-template-columns: repeat(2, 1fr); }
       .metrics-2 { grid-template-columns: 1fr; }
@@ -45,15 +49,8 @@
          Uses a <strong>one-sided test</strong>: only positive significant results get shipped.</p>
     </section>
 
-    <!-- STEP INDICATOR -->
-    <div class="step-indicator">
-      <div class="step-dot active" id="dot1">1</div><div class="step-connector" id="conn1"></div>
-      <div class="step-dot" id="dot2">2</div><div class="step-connector" id="conn2"></div>
-      <div class="step-dot" id="dot3">3</div>
-    </div>
-
     <!-- ==================== STEP 1: DISTRIBUTION ==================== -->
-    <section class="sim-step active" id="step1">
+    <section id="step1">
       <h2 class="section-title">Step 1 &mdash; Define the True Lift Distribution</h2>
       <p class="section-desc">What does your portfolio of experiment ideas look like? Define the <em>reality</em>: what fraction
         are winners, losers, or flat? Each simulated experiment will draw a true lift from this distribution.</p>
@@ -149,14 +146,10 @@
       <div class="chart-wrap" id="liftDistWrap">
         <div id="liftDistChart"></div>
       </div>
-
-      <div class="chart-actions">
-        <button id="confirmDist">Confirm Distribution &amp; Continue</button>
-      </div>
     </section>
 
     <!-- ==================== STEP 2: EXPERIMENT DESIGN ==================== -->
-    <section class="sim-step" id="step2">
+    <section id="step2">
       <h2 class="section-title">Step 2 &mdash; Design the Experiment</h2>
       <p class="section-desc">Set your experiment parameters. These determine sample size, runtime, and how many experiments
         fit in a year. The tradeoff: smaller MDE catches more effects but needs longer tests, leaving fewer experiments per year.</p>
@@ -196,74 +189,48 @@
       </div>
 
       <div id="runtimeWarning" class="warning-badge" style="display:none">Runtime exceeds 365 days &mdash; no experiments can run!</div>
-
-      <div class="chart-actions">
-        <button id="confirmDesign">Continue to Simulation</button>
-      </div>
     </section>
 
     <!-- ==================== STEP 3: YEARLY SIMULATION ==================== -->
-    <section class="sim-step" id="step3">
+    <section id="step3">
       <h2 class="section-title">Step 3 &mdash; Simulate a Year of Experiments</h2>
       <p class="section-desc">Run experiments back-to-back for a full year. Each experiment draws a new true lift from your
         distribution, runs for the calculated runtime, and you ship only the statistically significant positive results.
-        <strong>Change the design parameters and re-simulate to find the strategy that maximizes cumulative true lift.</strong></p>
-
-      <div class="controls">
-        <div class="slider-group">
-          <label>Alpha (1-sided): <span id="alphaValue3">0.05</span></label>
-          <input type="range" id="alphaSlider3" min="0.01" max="0.20" value="0.05" step="0.01">
-        </div>
-        <div class="slider-group">
-          <label>Power (1&minus;&beta;): <span id="powerValue3">0.80</span></label>
-          <input type="range" id="powerSlider3" min="0.50" max="0.99" value="0.80" step="0.01">
-        </div>
-        <div class="slider-group">
-          <label>MDE (relative): <span id="mdeValue3">2.0</span>%</label>
-          <input type="range" id="mdeSlider3" min="0.5" max="20" value="2" step="0.5">
-        </div>
-      </div>
-      <div class="controls">
-        <div class="slider-group">
-          <label>Baseline CVR: <span id="baselineValue3">5.0</span>%</label>
-          <input type="range" id="baselineSlider3" min="0.5" max="30" value="5" step="0.5">
-        </div>
-        <div class="slider-group">
-          <label>Daily Traffic: <span id="trafficValue3">10,000</span></label>
-          <input type="range" id="trafficSlider3" min="2" max="6" value="4" step="0.1">
-        </div>
-      </div>
-
-      <div class="metrics metrics-4" id="designSummary">
-        <div class="metric-card"><div class="metric-label">Sample Size / Group</div><div class="metric-value" id="ss3">&mdash;</div></div>
-        <div class="metric-card"><div class="metric-label">Runtime (days)</div><div class="metric-value" id="rt3">&mdash;</div></div>
-        <div class="metric-card"><div class="metric-label">Experiments / Year</div><div class="metric-value" id="epy3">&mdash;</div></div>
-        <div class="metric-card"><div class="metric-label">Test Type</div><div class="metric-value" style="font-size:1rem">1-sided</div></div>
-      </div>
-      <div id="runtimeWarning3" class="warning-badge" style="display:none">Runtime exceeds 365 days &mdash; no experiments can run!</div>
+        <strong>Change the design parameters above and re-simulate to find the strategy that maximizes cumulative true lift.</strong></p>
 
       <div class="chart-actions">
         <button id="runYear">Simulate 1 Year</button>
-        <button id="runYearMany" class="btn-secondary">Simulate 100 Years</button>
         <button id="resetYear" class="btn-danger">Reset</button>
       </div>
 
       <!-- Single-year metrics -->
       <div id="yearMetrics" style="display:none">
-        <div class="metrics">
-          <div class="metric-card"><div class="metric-label">Experiments Run</div><div class="metric-value" id="ymTotal">&mdash;</div></div>
-          <div class="metric-card"><div class="metric-label">Positive True Lift</div><div class="metric-value" id="ymPositive">&mdash;</div></div>
-          <div class="metric-card"><div class="metric-label">Negative True Lift</div><div class="metric-value" id="ymNegative">&mdash;</div></div>
+        <h3 class="metrics-subhead">
+          Portfolio Composition <span class="tally" id="ymTotalTally">&mdash; experiments</span>
+        </h3>
+        <div class="metrics metrics-4">
+          <div class="metric-card"><div class="metric-label">Harmful (&lt; -0.5%)</div><div class="metric-value band-harm" id="ymBandHarm">&mdash;</div></div>
+          <div class="metric-card"><div class="metric-label">Flat (&minus;0.5 to +0.5%)</div><div class="metric-value" id="ymBandFlat">&mdash;</div></div>
+          <div class="metric-card"><div class="metric-label">Small Wins (0.5&ndash;2.5%)</div><div class="metric-value" id="ymBandSmall">&mdash;</div></div>
+          <div class="metric-card"><div class="metric-label">Big Wins (&gt; 2.5%)</div><div class="metric-value band-big" id="ymBandBig">&mdash;</div></div>
         </div>
-        <div class="metrics">
-          <div class="metric-card"><div class="metric-label">Shipped (statsig+)</div><div class="metric-value" id="ymStatsig">&mdash;</div></div>
-          <div class="metric-card"><div class="metric-label">True Positives</div><div class="metric-value" id="ymTP">&mdash;</div></div>
-          <div class="metric-card"><div class="metric-label">False Positives</div><div class="metric-value" id="ymFP">&mdash;</div></div>
+
+        <h3 class="metrics-subhead">
+          Shipped by True-Lift Band <span class="tally" id="ymShipTally">&mdash; shipped</span>
+        </h3>
+        <div class="metrics metrics-4">
+          <div class="metric-card"><div class="metric-label">Shipped Harmful</div><div class="metric-value band-harm" id="ymShipHarm">&mdash;</div></div>
+          <div class="metric-card"><div class="metric-label">Shipped Flat</div><div class="metric-value" id="ymShipFlat">&mdash;</div></div>
+          <div class="metric-card"><div class="metric-label">Shipped Small Wins</div><div class="metric-value" id="ymShipSmall">&mdash;</div></div>
+          <div class="metric-card"><div class="metric-label">Shipped Big Wins</div><div class="metric-value band-big" id="ymShipBig">&mdash;</div></div>
         </div>
-        <div class="metrics">
-          <div class="metric-card"><div class="metric-label">False Positive Rate</div><div class="metric-value" id="ymFPR">&mdash;</div></div>
-          <div class="metric-card"><div class="metric-label">Cumulative True Lift (shipped)</div><div class="metric-value" id="ymCumLift">&mdash;</div></div>
+
+        <h3 class="metrics-subhead">Shipping Quality &amp; Winner&rsquo;s Curse</h3>
+        <div class="metrics metrics-4">
+          <div class="metric-card"><div class="metric-label">Cumulative True Lift</div><div class="metric-value" id="ymCumLift">&mdash;</div></div>
           <div class="metric-card"><div class="metric-label">Avg True Lift / Shipped</div><div class="metric-value" id="ymAvgLift">&mdash;</div></div>
+          <div class="metric-card"><div class="metric-label">Avg Observed Lift / Shipped</div><div class="metric-value" id="ymAvgObs">&mdash;</div></div>
+          <div class="metric-card"><div class="metric-label">Inflation (Obs &minus; True)</div><div class="metric-value" id="ymInflation">&mdash;</div></div>
         </div>
       </div>
 
@@ -275,9 +242,13 @@
         <div id="yearLiftChart"></div>
       </div>
 
+      <div class="chart-actions" id="manyYearsAction" style="display:none">
+        <button id="runYearMany" class="btn-secondary">Simulate 10 Years</button>
+      </div>
+
       <!-- Multi-year histogram -->
       <div id="multiYearSection" style="display:none">
-        <h2 class="section-title">Distribution of Cumulative True Lift Across 100 Years</h2>
+        <h2 class="section-title">Distribution of Cumulative True Lift Across 10 Years</h2>
         <p class="section-desc">Each year is an independent simulation. The histogram shows the range of outcomes you might expect.</p>
         <div class="metrics">
           <div class="metric-card"><div class="metric-label">Median Cumulative Lift</div><div class="metric-value" id="myMedian">&mdash;</div></div>
@@ -290,14 +261,15 @@
       </div>
     </section>
 
-    <section class="takeaway" id="takeawaySection" style="display:none">
+    <section class="takeaway" id="takeawaySection">
       <h3>The Portfolio Lesson</h3>
       <p>Underpowered tests (low power or high MDE) are cheap per test but miss real effects and let false positives through.
          Overpowered tests are precise but slow &mdash; you run fewer per year. The sweet spot maximizes
          <strong>cumulative true lift shipped</strong>, not any single test's accuracy.</p>
-      <p>Try different designs: lower your MDE to catch smaller effects (but run fewer tests),
-         or raise alpha to ship more aggressively (but accept more false positives). The right answer depends on
-         your portfolio's true lift distribution &mdash; and now you have the tool to find it.</p>
+      <p>Watch the <strong>Inflation (Obs &minus; True)</strong> metric closely: shipped experiments almost always show
+         observed lifts that overstate reality &mdash; the classic <em>winner's curse</em>. The gap widens as MDE rises
+         or power drops, because more ships sneak through on random noise. Meanwhile the <strong>Shipped by Band</strong>
+         grid shows how much of that shipping is real: big wins caught, or harmful/flat changes pushed to production.</p>
     </section>
   </div>
 
@@ -498,50 +470,31 @@
       return { experiments, runtime, sampleSize };
     }
 
+    function liftBand(trueLift) {
+      if (trueLift < -0.5) return 'harm';
+      if (trueLift <= 0.5) return 'flat';
+      if (trueLift <= 2.5) return 'small';
+      return 'big';
+    }
+
     function summarizeYear(experiments) {
       const total = experiments.length;
-      const positiveTrue = experiments.filter(e => e.trueLift > 0).length;
-      const negativeTrue = experiments.filter(e => e.trueLift < 0).length;
-      const statsig = experiments.filter(e => e.shipped).length;
-      const tp = experiments.filter(e => e.shipped && e.trueLift > 0).length;
-      const fp = experiments.filter(e => e.shipped && e.trueLift <= 0).length;
-      const fpr = statsig > 0 ? fp / statsig : 0;
-      const cumLift = experiments.filter(e => e.shipped).reduce((s, e) => s + e.trueLift, 0);
-      const avgLift = statsig > 0 ? cumLift / statsig : 0;
-      return { total, positiveTrue, negativeTrue, statsig, tp, fp, fpr, cumLift, avgLift };
-    }
-
-    // =====================================================================
-    // STEPPER NAVIGATION (3 steps)
-    // =====================================================================
-    const TOTAL_STEPS = 3;
-    let currentStep = 1;
-    const maxUnlocked = [1];
-
-    function goToStep(n) {
-      for (let i = 1; i <= TOTAL_STEPS; i++) {
-        document.getElementById('step' + i).classList.toggle('active', i === n);
-        const dot = document.getElementById('dot' + i);
-        dot.classList.remove('active', 'completed');
-        if (i < n) dot.classList.add('completed');
-        else if (i === n) dot.classList.add('active');
-        if (i < TOTAL_STEPS) {
-          document.getElementById('conn' + i).classList.toggle('completed', i < n);
-        }
-      }
-      currentStep = n;
-      document.getElementById('takeawaySection').style.display = n === TOTAL_STEPS ? 'block' : 'none';
-    }
-
-    function unlockStep(n) {
-      if (!maxUnlocked.includes(n)) maxUnlocked.push(n);
-      goToStep(n);
-    }
-
-    for (let i = 1; i <= TOTAL_STEPS; i++) {
-      document.getElementById('dot' + i).addEventListener('click', () => {
-        if (maxUnlocked.includes(i)) goToStep(i);
+      const bandCounts = { harm: 0, flat: 0, small: 0, big: 0 };
+      const bandShipped = { harm: 0, flat: 0, small: 0, big: 0 };
+      experiments.forEach(e => {
+        const b = liftBand(e.trueLift);
+        bandCounts[b]++;
+        if (e.shipped) bandShipped[b]++;
       });
+
+      const shippedArr = experiments.filter(e => e.shipped);
+      const statsig = shippedArr.length;
+      const cumLift = shippedArr.reduce((s, e) => s + e.trueLift, 0);
+      const avgLift = statsig > 0 ? cumLift / statsig : 0;
+      const avgObsLift = statsig > 0 ? shippedArr.reduce((s, e) => s + e.obsLift, 0) / statsig : 0;
+      const inflation = avgObsLift - avgLift;
+
+      return { total, bandCounts, bandShipped, statsig, cumLift, avgLift, avgObsLift, inflation };
     }
 
     // =====================================================================
@@ -620,28 +573,21 @@
     // =====================================================================
     // STEP 2: DESIGN METRICS
     // =====================================================================
-    function updateDesignMetrics(prefix) {
-      const alpha = parseFloat(document.getElementById('alphaSlider' + prefix).value);
-      const power = parseFloat(document.getElementById('powerSlider' + prefix).value);
-      const mde = parseFloat(document.getElementById('mdeSlider' + prefix).value);
-      const baseline = parseFloat(document.getElementById('baselineSlider' + prefix).value);
-      const traffic = Math.round(Math.pow(10, parseFloat(document.getElementById('trafficSlider' + prefix).value)));
+    function updateDesignMetrics() {
+      const alpha = parseFloat(document.getElementById('alphaSlider').value);
+      const power = parseFloat(document.getElementById('powerSlider').value);
+      const mde = parseFloat(document.getElementById('mdeSlider').value);
+      const baseline = parseFloat(document.getElementById('baselineSlider').value);
+      const traffic = Math.round(Math.pow(10, parseFloat(document.getElementById('trafficSlider').value)));
 
       const n = computeSampleSize(alpha, power, baseline, mde);
       const runtime = computeRuntime(n, traffic);
       const expsPerYear = runtime <= 365 ? Math.floor(365 / runtime) : 0;
 
-      if (prefix === '') {
-        document.getElementById('sampleSizeVal').textContent = isFinite(n) ? n.toLocaleString() : '--';
-        document.getElementById('runtimeVal').textContent = runtime > 365 ? '>365' : runtime;
-        document.getElementById('expsPerYear').textContent = expsPerYear;
-        document.getElementById('runtimeWarning').style.display = runtime > 365 ? 'block' : 'none';
-      } else {
-        document.getElementById('ss3').textContent = isFinite(n) ? n.toLocaleString() : '--';
-        document.getElementById('rt3').textContent = runtime > 365 ? '>365' : runtime;
-        document.getElementById('epy3').textContent = expsPerYear;
-        document.getElementById('runtimeWarning3').style.display = runtime > 365 ? 'block' : 'none';
-      }
+      document.getElementById('sampleSizeVal').textContent = isFinite(n) ? n.toLocaleString() : '--';
+      document.getElementById('runtimeVal').textContent = runtime > 365 ? '>365' : runtime;
+      document.getElementById('expsPerYear').textContent = expsPerYear;
+      document.getElementById('runtimeWarning').style.display = runtime > 365 ? 'block' : 'none';
     }
 
     // =====================================================================
@@ -748,10 +694,11 @@
       const minLift = d3.min(lifts);
       const maxLift = d3.max(lifts);
       const range = maxLift - minLift || 1;
-      const binW = range / 20;
-      const bins = new Array(20).fill(0);
+      const numBins = Math.min(10, Math.max(5, multiYearResults.length));
+      const binW = range / numBins;
+      const bins = new Array(numBins).fill(0);
       lifts.forEach(l => {
-        const idx = Math.min(Math.floor((l - minLift) / binW), 19);
+        const idx = Math.min(Math.floor((l - minLift) / binW), numBins - 1);
         bins[idx]++;
       });
       const maxCount = d3.max(bins);
@@ -793,16 +740,39 @@
 
     function updateYearMetrics(summary) {
       document.getElementById('yearMetrics').style.display = 'block';
-      document.getElementById('ymTotal').textContent = summary.total;
-      document.getElementById('ymPositive').textContent = summary.positiveTrue;
-      document.getElementById('ymNegative').textContent = summary.negativeTrue;
-      document.getElementById('ymStatsig').textContent = summary.statsig;
-      document.getElementById('ymTP').textContent = summary.tp;
-      document.getElementById('ymFP').textContent = summary.fp;
-      document.getElementById('ymFPR').textContent = summary.statsig > 0 ? (summary.fpr * 100).toFixed(1) + '%' : 'N/A';
-      document.getElementById('ymCumLift').textContent = summary.cumLift.toFixed(2) + '%';
+
+      // Portfolio
+      document.getElementById('ymTotalTally').textContent = summary.total + ' experiment' + (summary.total === 1 ? '' : 's');
+      document.getElementById('ymBandHarm').textContent = summary.bandCounts.harm;
+      document.getElementById('ymBandHarm').className = 'metric-value band-harm';
+      document.getElementById('ymBandFlat').textContent = summary.bandCounts.flat;
+      document.getElementById('ymBandFlat').className = 'metric-value';
+      document.getElementById('ymBandSmall').textContent = summary.bandCounts.small;
+      document.getElementById('ymBandSmall').className = 'metric-value';
+      document.getElementById('ymBandBig').textContent = summary.bandCounts.big;
+      document.getElementById('ymBandBig').className = 'metric-value band-big';
+
+      // Shipped by band (value = "N / M" where M is portfolio count)
+      const shipBand = (s, c) => c > 0 ? `${s} / ${c}` : `${s} / 0`;
+      document.getElementById('ymShipTally').textContent = summary.statsig + ' of ' + summary.total + ' shipped';
+      document.getElementById('ymShipHarm').textContent = shipBand(summary.bandShipped.harm, summary.bandCounts.harm);
+      document.getElementById('ymShipHarm').className = 'metric-value band-harm';
+      document.getElementById('ymShipFlat').textContent = shipBand(summary.bandShipped.flat, summary.bandCounts.flat);
+      document.getElementById('ymShipFlat').className = 'metric-value';
+      document.getElementById('ymShipSmall').textContent = shipBand(summary.bandShipped.small, summary.bandCounts.small);
+      document.getElementById('ymShipSmall').className = 'metric-value';
+      document.getElementById('ymShipBig').textContent = shipBand(summary.bandShipped.big, summary.bandCounts.big);
+      document.getElementById('ymShipBig').className = 'metric-value band-big';
+
+      // Quality
+      const signStr = v => (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
+      document.getElementById('ymCumLift').textContent = signStr(summary.cumLift);
       document.getElementById('ymCumLift').className = 'metric-value ' + (summary.cumLift >= 0 ? 'result-positive' : 'result-negative');
-      document.getElementById('ymAvgLift').textContent = summary.statsig > 0 ? summary.avgLift.toFixed(2) + '%' : 'N/A';
+      document.getElementById('ymAvgLift').textContent = summary.statsig > 0 ? signStr(summary.avgLift) : 'N/A';
+      document.getElementById('ymAvgLift').className = 'metric-value ' + (summary.statsig === 0 ? '' : (summary.avgLift >= 0 ? 'result-positive' : 'result-negative'));
+      document.getElementById('ymAvgObs').textContent = summary.statsig > 0 ? signStr(summary.avgObsLift) : 'N/A';
+      document.getElementById('ymInflation').textContent = summary.statsig > 0 ? signStr(summary.inflation) : 'N/A';
+      document.getElementById('ymInflation').className = 'metric-value ' + (summary.statsig === 0 ? '' : (summary.inflation > 0 ? 'result-negative' : 'result-positive'));
     }
 
     // =====================================================================
@@ -952,11 +922,6 @@
       });
     });
 
-    document.getElementById('confirmDist').addEventListener('click', () => {
-      unlockStep(2);
-      updateDesignMetrics('');
-    });
-
     // --- Step 2: Design sliders ---
     ['alphaSlider', 'powerSlider', 'mdeSlider', 'baselineSlider', 'trafficSlider'].forEach(id => {
       document.getElementById(id).addEventListener('input', function() {
@@ -967,65 +932,40 @@
         else if (id === 'trafficSlider') {
           document.getElementById('trafficValue').textContent = Math.round(Math.pow(10, parseFloat(this.value))).toLocaleString();
         }
-        updateDesignMetrics('');
+        updateDesignMetrics();
       });
     });
 
-    document.getElementById('confirmDesign').addEventListener('click', () => {
-      // Sync step 3 sliders from step 2
-      document.getElementById('alphaSlider3').value = document.getElementById('alphaSlider').value;
-      document.getElementById('alphaValue3').textContent = document.getElementById('alphaValue').textContent;
-      document.getElementById('powerSlider3').value = document.getElementById('powerSlider').value;
-      document.getElementById('powerValue3').textContent = document.getElementById('powerValue').textContent;
-      document.getElementById('mdeSlider3').value = document.getElementById('mdeSlider').value;
-      document.getElementById('mdeValue3').textContent = document.getElementById('mdeValue').textContent;
-      document.getElementById('baselineSlider3').value = document.getElementById('baselineSlider').value;
-      document.getElementById('baselineValue3').textContent = document.getElementById('baselineValue').textContent;
-      document.getElementById('trafficSlider3').value = document.getElementById('trafficSlider').value;
-      document.getElementById('trafficValue3').textContent = document.getElementById('trafficValue').textContent;
-      updateDesignMetrics('3');
-      unlockStep(3);
-    });
-
-    // --- Step 3: Design sliders (for rapid iteration) ---
-    ['alphaSlider3', 'powerSlider3', 'mdeSlider3', 'baselineSlider3', 'trafficSlider3'].forEach(id => {
-      document.getElementById(id).addEventListener('input', function() {
-        if (id === 'alphaSlider3') document.getElementById('alphaValue3').textContent = parseFloat(this.value).toFixed(2);
-        else if (id === 'powerSlider3') document.getElementById('powerValue3').textContent = parseFloat(this.value).toFixed(2);
-        else if (id === 'mdeSlider3') document.getElementById('mdeValue3').textContent = parseFloat(this.value).toFixed(1);
-        else if (id === 'baselineSlider3') document.getElementById('baselineValue3').textContent = parseFloat(this.value).toFixed(1);
-        else if (id === 'trafficSlider3') {
-          document.getElementById('trafficValue3').textContent = Math.round(Math.pow(10, parseFloat(this.value))).toLocaleString();
-        }
-        updateDesignMetrics('3');
-      });
-    });
-
-    function getStep3Params() {
+    function getSimParams() {
       return {
-        alpha: parseFloat(document.getElementById('alphaSlider3').value),
-        power: parseFloat(document.getElementById('powerSlider3').value),
-        mde: parseFloat(document.getElementById('mdeSlider3').value),
-        baseline: parseFloat(document.getElementById('baselineSlider3').value),
-        traffic: Math.round(Math.pow(10, parseFloat(document.getElementById('trafficSlider3').value)))
+        alpha: parseFloat(document.getElementById('alphaSlider').value),
+        power: parseFloat(document.getElementById('powerSlider').value),
+        mde: parseFloat(document.getElementById('mdeSlider').value),
+        baseline: parseFloat(document.getElementById('baselineSlider').value),
+        traffic: Math.round(Math.pow(10, parseFloat(document.getElementById('trafficSlider').value)))
       };
     }
 
     // --- Step 3: Simulation buttons ---
     document.getElementById('runYear').addEventListener('click', () => {
-      const p = getStep3Params();
+      const p = getSimParams();
       const result = runYearSimulation(p.alpha, p.power, p.mde, p.baseline, p.traffic);
       yearExperiments = result.experiments;
       if (yearExperiments.length === 0) {
         document.getElementById('yearMetrics').style.display = 'block';
-        document.getElementById('ymTotal').textContent = '0';
-        ['ymPositive','ymNegative','ymStatsig','ymTP','ymFP','ymFPR','ymAvgLift'].forEach(id => {
+        document.getElementById('ymTotalTally').textContent = '0 experiments (runtime > 365d)';
+        document.getElementById('ymShipTally').textContent = '0 shipped';
+        ['ymBandHarm','ymBandFlat','ymBandSmall','ymBandBig',
+         'ymShipHarm','ymShipFlat','ymShipSmall','ymShipBig',
+         'ymAvgLift','ymAvgObs','ymInflation'].forEach(id => {
           document.getElementById(id).textContent = '—';
+          document.getElementById(id).className = 'metric-value';
         });
-        document.getElementById('ymCumLift').textContent = 'Runtime > 365d';
-        document.getElementById('ymCumLift').className = 'metric-value result-negative';
+        document.getElementById('ymCumLift').textContent = 'N/A';
+        document.getElementById('ymCumLift').className = 'metric-value result-neutral';
         document.getElementById('yearTimelineWrap').style.display = 'none';
         document.getElementById('yearLiftWrap').style.display = 'none';
+        document.getElementById('manyYearsAction').style.display = 'none';
         return;
       }
       const summary = summarizeYear(yearExperiments);
@@ -1035,26 +975,15 @@
       clDots.selectAll('circle').remove();
       updateYearTimelineChart();
       updateCumLiftChart();
+      document.getElementById('manyYearsAction').style.display = 'flex';
     });
 
     document.getElementById('runYearMany').addEventListener('click', () => {
-      const p = getStep3Params();
+      const p = getSimParams();
       multiYearResults = [];
-      for (let i = 0; i < 100; i++) {
+      for (let i = 0; i < 10; i++) {
         const result = runYearSimulation(p.alpha, p.power, p.mde, p.baseline, p.traffic);
         multiYearResults.push(summarizeYear(result.experiments));
-      }
-      // Also show the last single year
-      const lastResult = runYearSimulation(p.alpha, p.power, p.mde, p.baseline, p.traffic);
-      yearExperiments = lastResult.experiments;
-      if (yearExperiments.length > 0) {
-        const summary = summarizeYear(yearExperiments);
-        updateYearMetrics(summary);
-        ytChart.g.selectAll('rect.exp-bar').remove();
-        ytChart.g.selectAll('.legend').remove();
-        clDots.selectAll('circle').remove();
-        updateYearTimelineChart();
-        updateCumLiftChart();
       }
       myBarsG.selectAll('rect').remove();
       updateMultiYearChart();
@@ -1066,6 +995,7 @@
       document.getElementById('yearMetrics').style.display = 'none';
       document.getElementById('yearTimelineWrap').style.display = 'none';
       document.getElementById('yearLiftWrap').style.display = 'none';
+      document.getElementById('manyYearsAction').style.display = 'none';
       document.getElementById('multiYearSection').style.display = 'none';
       ytChart.g.selectAll('rect.exp-bar').remove();
       ytChart.g.selectAll('.legend').remove();
@@ -1077,6 +1007,7 @@
     // INITIAL RENDER
     // =====================================================================
     updateLiftDistChart();
+    updateDesignMetrics();
   </script>
 </body>
 </html>
