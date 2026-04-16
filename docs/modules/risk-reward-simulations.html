@@ -265,7 +265,7 @@
           <div class="metric-card"><div class="metric-label">Cumulative True Lift</div><div class="metric-value" id="ymCumLift">&mdash;</div></div>
           <div class="metric-card"><div class="metric-label">Avg True Lift / Shipped</div><div class="metric-value" id="ymAvgLift">&mdash;</div></div>
           <div class="metric-card"><div class="metric-label">Avg Observed Lift / Shipped</div><div class="metric-value" id="ymAvgObs">&mdash;</div></div>
-          <div class="metric-card"><div class="metric-label">Inflation (Obs &minus; True)</div><div class="metric-value" id="ymInflation">&mdash;</div></div>
+          <div class="metric-card"><div class="metric-label">Inflation (relative)</div><div class="metric-value" id="ymInflation">&mdash;</div></div>
         </div>
       </div>
 
@@ -349,10 +349,12 @@
       <p>Underpowered tests (low power or high MDE) are cheap per test but miss real effects and let false positives through.
          Overpowered tests are precise but slow &mdash; you run fewer per year. The sweet spot maximizes
          <strong>cumulative true lift shipped</strong>, not any single test's accuracy.</p>
-      <p>Watch the <strong>Inflation (Obs &minus; True)</strong> metric closely: shipped experiments almost always show
-         observed lifts that overstate reality &mdash; the classic <em>winner's curse</em>. The gap widens as MDE rises
-         or power drops, because more ships sneak through on random noise. Meanwhile the <strong>Shipped by Band</strong>
-         grid shows how much of that shipping is real: big wins caught, or harmful/flat changes pushed to production.</p>
+      <p>Watch the <strong>Inflation (relative)</strong> metric closely: shipped experiments almost always show
+         observed lifts that overstate reality &mdash; the classic <em>winner's curse</em>. A value of +50% means the
+         average observed lift of shipped experiments was 50% bigger than the average true lift. The gap widens as
+         MDE rises or power drops, because more ships sneak through on random noise. Meanwhile the
+         <strong>Shipped by Band</strong> grid shows how much of that shipping is real: big wins caught, or harmful/flat
+         changes pushed to production.</p>
     </section>
   </div>
 
@@ -576,9 +578,11 @@
       const sumObsLift = shippedArr.reduce((s, e) => s + e.obsLift, 0);
       const avgLift = statsig > 0 ? cumLift / statsig : 0;
       const avgObsLift = statsig > 0 ? sumObsLift / statsig : 0;
-      const inflation = avgObsLift - avgLift;
+      // Relative inflation: observed overstates true by X% of true lift.
+      // Undefined when cumulative true lift is <= 0 (ratio becomes meaningless).
+      const relInflation = (statsig > 0 && cumLift > 0) ? (sumObsLift - cumLift) / cumLift : null;
 
-      return { total, bandCounts, bandShipped, statsig, cumLift, sumObsLift, avgLift, avgObsLift, inflation };
+      return { total, bandCounts, bandShipped, statsig, cumLift, sumObsLift, avgLift, avgObsLift, relInflation };
     }
 
     // =====================================================================
@@ -855,8 +859,9 @@
       document.getElementById('ymAvgLift').textContent = summary.statsig > 0 ? signStr(summary.avgLift) : 'N/A';
       document.getElementById('ymAvgLift').className = 'metric-value ' + (summary.statsig === 0 ? '' : (summary.avgLift >= 0 ? 'result-positive' : 'result-negative'));
       document.getElementById('ymAvgObs').textContent = summary.statsig > 0 ? signStr(summary.avgObsLift) : 'N/A';
-      document.getElementById('ymInflation').textContent = summary.statsig > 0 ? signStr(summary.inflation) : 'N/A';
-      document.getElementById('ymInflation').className = 'metric-value ' + (summary.statsig === 0 ? '' : (summary.inflation > 0 ? 'result-negative' : 'result-positive'));
+      const relInf = summary.relInflation;
+      document.getElementById('ymInflation').textContent = relInf === null ? 'N/A' : (relInf >= 0 ? '+' : '') + (relInf * 100).toFixed(0) + '%';
+      document.getElementById('ymInflation').className = 'metric-value ' + (relInf === null ? '' : (relInf > 0 ? 'result-negative' : 'result-positive'));
     }
 
     // =====================================================================
@@ -1220,7 +1225,7 @@
           meanCumLift: totalCumLift / years,
           avgLiftPerShip: totalStatsig > 0 ? totalCumLift / totalStatsig : 0,
           avgObsPerShip: totalStatsig > 0 ? totalSumObs / totalStatsig : 0,
-          inflation: totalStatsig > 0 ? (totalSumObs - totalCumLift) / totalStatsig : 0,
+          relInflation: (totalStatsig > 0 && totalCumLift > 0) ? (totalSumObs - totalCumLift) / totalCumLift : null,
           meanShipHarm: sum(s => s.bandShipped.harm) / years,
           meanShipFlat: sum(s => s.bandShipped.flat) / years,
           meanShipSmall: sum(s => s.bandShipped.small) / years,
@@ -1238,16 +1243,19 @@
 
       const extreme = (f, dir) => {
         if (!hasValidGroup) return null;
-        const vals = valid.map(f);
+        const vals = valid.map(f).filter(v => v !== null && isFinite(v));
+        if (vals.length === 0) return null;
         return dir === 'max' ? Math.max(...vals) : Math.min(...vals);
       };
       const mark = (f, bestDir) => (r) => {
         if (r.invalid) return '';
+        const v = f(r);
+        if (v === null || !isFinite(v)) return '';
         const best = extreme(f, bestDir);
         const worst = extreme(f, bestDir === 'max' ? 'min' : 'max');
-        if (best === worst) return '';
-        if (f(r) === best) return 'best';
-        if (f(r) === worst) return 'worst';
+        if (best === null || best === worst) return '';
+        if (v === best) return 'best';
+        if (v === worst) return 'worst';
         return '';
       };
 
@@ -1274,7 +1282,7 @@
         { label: 'Cum true lift / year', fmt: r => r.invalid ? '—' : fmtSigned(r.meanCumLift), cls: mark(r => r.meanCumLift, 'max') },
         { label: 'Avg true lift / shipped', fmt: r => r.invalid ? '—' : fmtSigned(r.avgLiftPerShip), cls: mark(r => r.avgLiftPerShip, 'max') },
         { label: 'Avg observed lift / shipped', fmt: r => r.invalid ? '—' : fmtSigned(r.avgObsPerShip) },
-        { label: 'Inflation (obs − true)', fmt: r => r.invalid ? '—' : fmtSigned(r.inflation), cls: mark(r => r.inflation, 'min') },
+        { label: 'Inflation (relative)', fmt: r => (r.invalid || r.relInflation === null) ? '—' : (r.relInflation >= 0 ? '+' : '') + (r.relInflation * 100).toFixed(0) + '%', cls: mark(r => r.relInflation, 'min') },
       ];
 
       let html = '<thead><tr><th></th>';
