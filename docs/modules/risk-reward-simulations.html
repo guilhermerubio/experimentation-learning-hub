@@ -191,8 +191,8 @@
 
       <div class="controls">
         <div class="slider-group">
-          <label>Alpha (1-sided): <span id="alphaValue">0.05</span></label>
-          <input type="range" id="alphaSlider" min="0.01" max="0.50" value="0.05" step="0.01">
+          <label>Alpha (1-sided): <span id="alphaValue">0.10</span></label>
+          <input type="range" id="alphaSlider" min="0.01" max="0.50" value="0.10" step="0.01">
         </div>
         <div class="slider-group">
           <label>Power (1&minus;&beta;): <span id="powerValue">0.80</span></label>
@@ -201,18 +201,18 @@
       </div>
       <div class="controls">
         <div class="slider-group">
-          <label>MDE (relative): <span id="mdeValue">2.0</span>%</label>
-          <input type="range" id="mdeSlider" min="0.5" max="20" value="2" step="0.5">
+          <label>MDE (relative): <span id="mdeValue">5.0</span>%</label>
+          <input type="range" id="mdeSlider" min="0.5" max="20" value="5" step="0.5">
         </div>
         <div class="slider-group">
-          <label>Baseline CVR: <span id="baselineValue">5.0</span>%</label>
-          <input type="range" id="baselineSlider" min="0.5" max="30" value="5" step="0.5">
+          <label>Baseline CVR: <span id="baselineValue">1.0</span>%</label>
+          <input type="range" id="baselineSlider" min="0.5" max="30" value="1" step="0.5">
         </div>
       </div>
       <div class="controls">
         <div class="slider-group">
-          <label>Daily Traffic (users/day): <span id="trafficValue">10,000</span></label>
-          <input type="range" id="trafficSlider" min="2" max="6" value="4" step="0.1">
+          <label>Daily Traffic (users/day): <span id="trafficValue">50,119</span></label>
+          <input type="range" id="trafficSlider" min="2" max="6" value="4.7" step="0.1">
         </div>
       </div>
 
@@ -307,12 +307,12 @@
       <h3 class="metrics-subhead">Shared Context</h3>
       <div class="controls">
         <div class="slider-group">
-          <label>Baseline CVR: <span id="cBaselineValue">5.0</span>%</label>
-          <input type="range" id="cBaseline" min="0.5" max="30" value="5" step="0.5">
+          <label>Baseline CVR: <span id="cBaselineValue">1.0</span>%</label>
+          <input type="range" id="cBaseline" min="0.5" max="30" value="1" step="0.5">
         </div>
         <div class="slider-group">
-          <label>Daily Traffic: <span id="cTrafficValue">10,000</span></label>
-          <input type="range" id="cTraffic" min="2" max="6" value="4" step="0.1">
+          <label>Daily Traffic: <span id="cTrafficValue">50,119</span></label>
+          <input type="range" id="cTraffic" min="2" max="6" value="4.7" step="0.1">
         </div>
         <div class="slider-group">
           <label>Years per design: <span id="cYearsValue">30</span></label>
@@ -1094,10 +1094,10 @@
     const DESIGN_LETTERS = ['A', 'B', 'C', 'D'];
 
     let compareDesigns = [
-      { alpha: 0.05, power: 0.80, mde: 2.0 },
-      { alpha: 0.10, power: 0.80, mde: 2.0 }
+      { alpha: 0.10, power: 0.80, mde: 5.0 },
+      { alpha: 0.10, power: 0.95, mde: 3.0 }
     ];
-    let compareShared = { baseline: 5.0, traffic: 10000, years: 30 };
+    let compareShared = { baseline: 1.0, traffic: 50119, years: 30 };
     let lastCompareResults = null;
 
     function renderDesignCards() {
@@ -1171,7 +1171,7 @@
 
     document.getElementById('addDesign').addEventListener('click', () => {
       if (compareDesigns.length >= 4) return;
-      const last = compareDesigns[compareDesigns.length - 1] || { alpha: 0.05, power: 0.80, mde: 2.0 };
+      const last = compareDesigns[compareDesigns.length - 1] || { alpha: 0.10, power: 0.80, mde: 5.0 };
       compareDesigns.push({ ...last });
       renderDesignCards();
     });
