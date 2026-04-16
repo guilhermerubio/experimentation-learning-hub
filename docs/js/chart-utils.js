@@ -1,5 +1,5 @@
 /**
- * Shared D3 chart utilities for the Experimentation Learning Hub.
+ * Shared D3 chart utilities for the Experimentation Learning and Simulations Hub.
  *
  * Usage in a module:
  *   <script src="https://d3js.org/d3.v7.min.js"></script>

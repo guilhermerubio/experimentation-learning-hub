@@ -23,7 +23,7 @@ function renderNav(currentModuleId) {
   const brand = document.createElement('a');
   brand.href = prefix + 'index.html';
   brand.className = 'nav-brand';
-  brand.textContent = 'Exp Learning Hub';
+  brand.textContent = 'Exp Learning & Simulations Hub';
   nav.appendChild(brand);
 
   MODULES.forEach(mod => {

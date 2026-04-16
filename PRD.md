@@ -1,4 +1,4 @@
-# Experimentation Learning Hub — Product Requirements Document
+# Experimentation Learning and Simulations Hub — Product Requirements Document
 
 ## 1. Vision & Problem Statement
 

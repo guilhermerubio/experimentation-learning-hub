@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Risk & Reward Simulations — Exp Learning Hub</title>
+  <title>Risk & Reward Simulations — Experimentation Learning and Simulations Hub</title>
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <link rel="stylesheet" href="../style.css">
   <script src="../js/nav.js"></script>
@@ -26,6 +26,30 @@
     .metrics-subhead .tally { font-size: 0.85rem; font-weight: 500; color: #6b7280; }
     .metric-value.band-harm { color: #EF4444; }
     .metric-value.band-big { color: #059669; }
+    .mode-toggle-wrap { margin: 2rem 0 1.5rem; display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+    .mode-toggle-wrap .mode-label { font-weight: 600; color: #374151; }
+    .design-card {
+      background: #fff; border: 1px solid #e5e7eb; border-left: 3px solid #4F46E5;
+      border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 0.75rem;
+    }
+    .design-card .design-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
+    .design-card .design-title { font-size: 1rem; font-weight: 600; }
+    .design-card .design-remove { background: transparent; color: #ef4444; border: 1px solid #e5e7eb; padding: 0.15rem 0.6rem; font-size: 0.8rem; border-radius: 4px; }
+    .design-card .design-remove:hover { background: #fee2e2; border-color: #fca5a5; }
+    .design-card .design-derived { font-size: 0.85rem; color: #6b7280; margin-top: 0.25rem; }
+    .design-card .design-derived strong { color: #374151; }
+    .design-card.invalid { opacity: 0.65; }
+    .design-card.invalid .design-derived .warn { color: #b45309; }
+    .compare-table-wrap { overflow-x: auto; margin-top: 0.5rem; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; }
+    .compare-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+    .compare-table th, .compare-table td { padding: 0.55rem 0.9rem; text-align: right; border-bottom: 1px solid #f3f4f6; }
+    .compare-table th:first-child, .compare-table td:first-child { text-align: left; font-weight: 500; color: #374151; }
+    .compare-table thead th { background: #f9fafb; font-weight: 600; color: #374151; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    .compare-table tr.divider th { background: #f3f4f6; font-size: 0.72rem; text-transform: uppercase; color: #6b7280; padding-top: 0.7rem; padding-bottom: 0.3rem; text-align: left; letter-spacing: 0.05em; }
+    .compare-table td.best { background: #ecfdf5; color: #065f46; font-weight: 600; }
+    .compare-table td.worst { background: #fef2f2; color: #991b1b; font-weight: 500; }
+    .compare-table .design-color-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+    .compare-table .invalid-cell { color: #b45309; font-style: italic; }
     @media (max-width: 600px) {
       .metrics-4, .metrics { grid-template-columns: repeat(2, 1fr); }
       .metrics-2 { grid-template-columns: 1fr; }
@@ -148,6 +172,17 @@
       </div>
     </section>
 
+    <!-- MODE TOGGLE: Single Design vs Compare Designs -->
+    <div class="mode-toggle-wrap">
+      <span class="mode-label">Mode:</span>
+      <div class="toggle-group" id="modeToggle">
+        <button class="toggle-btn active" data-mode="single">Single Design</button>
+        <button class="toggle-btn" data-mode="compare">Compare Designs</button>
+      </div>
+    </div>
+
+    <div id="singleMode">
+
     <!-- ==================== STEP 2: EXPERIMENT DESIGN ==================== -->
     <section id="step2">
       <h2 class="section-title">Step 2 &mdash; Design the Experiment</h2>
@@ -157,7 +192,7 @@
       <div class="controls">
         <div class="slider-group">
           <label>Alpha (1-sided): <span id="alphaValue">0.05</span></label>
-          <input type="range" id="alphaSlider" min="0.01" max="0.20" value="0.05" step="0.01">
+          <input type="range" id="alphaSlider" min="0.01" max="0.50" value="0.05" step="0.01">
         </div>
         <div class="slider-group">
           <label>Power (1&minus;&beta;): <span id="powerValue">0.80</span></label>
@@ -260,6 +295,54 @@
         </div>
       </div>
     </section>
+
+    </div><!-- /singleMode -->
+
+    <div id="compareMode" style="display:none">
+      <h2 class="section-title">Compare Experiment Designs</h2>
+      <p class="section-desc">Set up multiple designs and simulate each across many years using the Step&nbsp;1 distribution.
+        The baseline CVR, daily traffic, and number of simulated years are shared — only the design choices differ so the
+        comparison is apples-to-apples. The table highlights the best (green) and worst (red) design per row.</p>
+
+      <h3 class="metrics-subhead">Shared Context</h3>
+      <div class="controls">
+        <div class="slider-group">
+          <label>Baseline CVR: <span id="cBaselineValue">5.0</span>%</label>
+          <input type="range" id="cBaseline" min="0.5" max="30" value="5" step="0.5">
+        </div>
+        <div class="slider-group">
+          <label>Daily Traffic: <span id="cTrafficValue">10,000</span></label>
+          <input type="range" id="cTraffic" min="2" max="6" value="4" step="0.1">
+        </div>
+        <div class="slider-group">
+          <label>Years per design: <span id="cYearsValue">30</span></label>
+          <input type="range" id="cYears" min="10" max="100" value="30" step="5">
+        </div>
+      </div>
+
+      <h3 class="metrics-subhead">
+        Designs <span class="tally" id="cDesignCount">2 / 4</span>
+      </h3>
+      <div id="designsContainer"></div>
+
+      <div class="chart-actions">
+        <button id="addDesign" class="btn-secondary">+ Add Design</button>
+        <button id="runCompare">Run Comparison</button>
+        <button id="resetCompare" class="btn-danger">Reset</button>
+      </div>
+
+      <div id="compareResults" style="display:none">
+        <h3 class="metrics-subhead">Mean Cumulative True Lift per Year</h3>
+        <div class="chart-wrap" id="compareBarWrap">
+          <div id="compareBarChart"></div>
+        </div>
+
+        <h3 class="metrics-subhead">Full Comparison</h3>
+        <div class="compare-table-wrap">
+          <table id="compareTable" class="compare-table"></table>
+        </div>
+      </div>
+    </div><!-- /compareMode -->
 
     <section class="takeaway" id="takeawaySection">
       <h3>The Portfolio Lesson</h3>
@@ -490,11 +573,12 @@
       const shippedArr = experiments.filter(e => e.shipped);
       const statsig = shippedArr.length;
       const cumLift = shippedArr.reduce((s, e) => s + e.trueLift, 0);
+      const sumObsLift = shippedArr.reduce((s, e) => s + e.obsLift, 0);
       const avgLift = statsig > 0 ? cumLift / statsig : 0;
-      const avgObsLift = statsig > 0 ? shippedArr.reduce((s, e) => s + e.obsLift, 0) / statsig : 0;
+      const avgObsLift = statsig > 0 ? sumObsLift / statsig : 0;
       const inflation = avgObsLift - avgLift;
 
-      return { total, bandCounts, bandShipped, statsig, cumLift, avgLift, avgObsLift, inflation };
+      return { total, bandCounts, bandShipped, statsig, cumLift, sumObsLift, avgLift, avgObsLift, inflation };
     }
 
     // =====================================================================
@@ -1004,10 +1088,298 @@
     });
 
     // =====================================================================
+    // COMPARE MODE
+    // =====================================================================
+    const DESIGN_COLORS = ['#4F46E5', '#059669', '#D97706', '#7C3AED'];
+    const DESIGN_LETTERS = ['A', 'B', 'C', 'D'];
+
+    let compareDesigns = [
+      { alpha: 0.05, power: 0.80, mde: 2.0 },
+      { alpha: 0.10, power: 0.80, mde: 2.0 }
+    ];
+    let compareShared = { baseline: 5.0, traffic: 10000, years: 30 };
+    let lastCompareResults = null;
+
+    function renderDesignCards() {
+      const container = document.getElementById('designsContainer');
+      container.innerHTML = '';
+      document.getElementById('cDesignCount').textContent = `${compareDesigns.length} / 4`;
+      document.getElementById('addDesign').style.display = compareDesigns.length >= 4 ? 'none' : '';
+
+      compareDesigns.forEach((d, i) => {
+        const color = DESIGN_COLORS[i];
+        const letter = DESIGN_LETTERS[i];
+        const n = computeSampleSize(d.alpha, d.power, compareShared.baseline, d.mde);
+        const runtime = computeRuntime(n, compareShared.traffic);
+        const epy = runtime <= 365 ? Math.floor(365 / runtime) : 0;
+        const invalid = runtime > 365 || !isFinite(n);
+
+        const card = document.createElement('div');
+        card.className = 'design-card' + (invalid ? ' invalid' : '');
+        card.style.borderLeftColor = color;
+        card.innerHTML = `
+          <div class="design-header">
+            <div class="design-title" style="color:${color}">Design ${letter}</div>
+            ${compareDesigns.length > 1 ? `<button class="design-remove" data-idx="${i}">Remove</button>` : ''}
+          </div>
+          <div class="controls">
+            <div class="slider-group">
+              <label>Alpha: <span>${d.alpha.toFixed(2)}</span></label>
+              <input type="range" class="s-alpha" data-idx="${i}" min="0.01" max="0.50" value="${d.alpha}" step="0.01">
+            </div>
+            <div class="slider-group">
+              <label>Power: <span>${d.power.toFixed(2)}</span></label>
+              <input type="range" class="s-power" data-idx="${i}" min="0.50" max="0.99" value="${d.power}" step="0.01">
+            </div>
+            <div class="slider-group">
+              <label>MDE: <span>${d.mde.toFixed(1)}</span>%</label>
+              <input type="range" class="s-mde" data-idx="${i}" min="0.5" max="20" value="${d.mde}" step="0.5">
+            </div>
+          </div>
+          <div class="design-derived">
+            Sample / group: <strong>${isFinite(n) ? n.toLocaleString() : '—'}</strong>
+            &middot; Runtime: <strong>${runtime > 365 ? '>365' : runtime}d</strong>
+            &middot; Exps/year: <strong>${epy}</strong>
+            ${invalid ? ' &middot; <span class="warn">(exceeds 365d — cannot run)</span>' : ''}
+          </div>
+        `;
+        container.appendChild(card);
+      });
+
+      container.querySelectorAll('.s-alpha, .s-power, .s-mde').forEach(s => {
+        s.addEventListener('input', onDesignSliderChange);
+      });
+      container.querySelectorAll('.design-remove').forEach(b => {
+        b.addEventListener('click', onDesignRemove);
+      });
+    }
+
+    function onDesignSliderChange(e) {
+      const idx = parseInt(e.target.dataset.idx);
+      const v = parseFloat(e.target.value);
+      if (e.target.classList.contains('s-alpha')) compareDesigns[idx].alpha = v;
+      else if (e.target.classList.contains('s-power')) compareDesigns[idx].power = v;
+      else if (e.target.classList.contains('s-mde')) compareDesigns[idx].mde = v;
+      renderDesignCards();
+    }
+
+    function onDesignRemove(e) {
+      const idx = parseInt(e.target.dataset.idx);
+      compareDesigns.splice(idx, 1);
+      renderDesignCards();
+    }
+
+    document.getElementById('addDesign').addEventListener('click', () => {
+      if (compareDesigns.length >= 4) return;
+      const last = compareDesigns[compareDesigns.length - 1] || { alpha: 0.05, power: 0.80, mde: 2.0 };
+      compareDesigns.push({ ...last });
+      renderDesignCards();
+    });
+
+    document.getElementById('cBaseline').addEventListener('input', function() {
+      compareShared.baseline = parseFloat(this.value);
+      document.getElementById('cBaselineValue').textContent = compareShared.baseline.toFixed(1);
+      renderDesignCards();
+    });
+    document.getElementById('cTraffic').addEventListener('input', function() {
+      compareShared.traffic = Math.round(Math.pow(10, parseFloat(this.value)));
+      document.getElementById('cTrafficValue').textContent = compareShared.traffic.toLocaleString();
+      renderDesignCards();
+    });
+    document.getElementById('cYears').addEventListener('input', function() {
+      compareShared.years = parseInt(this.value);
+      document.getElementById('cYearsValue').textContent = compareShared.years;
+    });
+
+    function runComparison() {
+      return compareDesigns.map((d, i) => {
+        const sampleSize = computeSampleSize(d.alpha, d.power, compareShared.baseline, d.mde);
+        const runtime = computeRuntime(sampleSize, compareShared.traffic);
+        if (runtime > 365 || !isFinite(sampleSize)) {
+          return { design: d, idx: i, invalid: true, sampleSize, runtime };
+        }
+        const summaries = [];
+        for (let y = 0; y < compareShared.years; y++) {
+          const { experiments } = runYearSimulation(d.alpha, d.power, d.mde, compareShared.baseline, compareShared.traffic);
+          summaries.push(summarizeYear(experiments));
+        }
+        const sum = (f) => summaries.reduce((a, x) => a + f(x), 0);
+        const years = summaries.length;
+        const totalStatsig = sum(s => s.statsig);
+        const totalCumLift = sum(s => s.cumLift);
+        const totalSumObs = sum(s => s.sumObsLift);
+        return {
+          design: d,
+          idx: i,
+          invalid: false,
+          sampleSize,
+          runtime,
+          expsPerYear: Math.floor(365 / runtime),
+          meanTotal: sum(s => s.total) / years,
+          meanStatsig: totalStatsig / years,
+          meanCumLift: totalCumLift / years,
+          avgLiftPerShip: totalStatsig > 0 ? totalCumLift / totalStatsig : 0,
+          avgObsPerShip: totalStatsig > 0 ? totalSumObs / totalStatsig : 0,
+          inflation: totalStatsig > 0 ? (totalSumObs - totalCumLift) / totalStatsig : 0,
+          meanShipHarm: sum(s => s.bandShipped.harm) / years,
+          meanShipFlat: sum(s => s.bandShipped.flat) / years,
+          meanShipSmall: sum(s => s.bandShipped.small) / years,
+          meanShipBig: sum(s => s.bandShipped.big) / years,
+        };
+      });
+    }
+
+    function fmtSigned(v, dec = 2) { return (v >= 0 ? '+' : '') + v.toFixed(dec) + '%'; }
+
+    function renderCompareTable(results) {
+      const table = document.getElementById('compareTable');
+      const valid = results.filter(r => !r.invalid);
+      const hasValidGroup = valid.length > 1;
+
+      const extreme = (f, dir) => {
+        if (!hasValidGroup) return null;
+        const vals = valid.map(f);
+        return dir === 'max' ? Math.max(...vals) : Math.min(...vals);
+      };
+      const mark = (f, bestDir) => (r) => {
+        if (r.invalid) return '';
+        const best = extreme(f, bestDir);
+        const worst = extreme(f, bestDir === 'max' ? 'min' : 'max');
+        if (best === worst) return '';
+        if (f(r) === best) return 'best';
+        if (f(r) === worst) return 'worst';
+        return '';
+      };
+
+      const rows = [
+        { group: 'Design Inputs' },
+        { label: 'α (1-sided)', fmt: r => r.design.alpha.toFixed(2) },
+        { label: 'Power', fmt: r => r.design.power.toFixed(2) },
+        { label: 'MDE (relative)', fmt: r => r.design.mde.toFixed(1) + '%' },
+
+        { group: 'Design Properties' },
+        { label: 'Sample size / group', fmt: r => r.invalid ? '—' : r.sampleSize.toLocaleString() },
+        { label: 'Runtime (days)', fmt: r => r.invalid ? '>365 ⚠' : r.runtime },
+        { label: 'Experiments / year', fmt: r => r.invalid ? '0' : r.expsPerYear },
+
+        { group: `Portfolio Outcomes (mean across ${compareShared.years} simulated years)` },
+        { label: 'Experiments run', fmt: r => r.invalid ? '—' : r.meanTotal.toFixed(1) },
+        { label: 'Shipped / year', fmt: r => r.invalid ? '—' : r.meanStatsig.toFixed(1) },
+        { label: 'Shipped harmful (< -0.5%)', fmt: r => r.invalid ? '—' : r.meanShipHarm.toFixed(2), cls: mark(r => r.meanShipHarm, 'min') },
+        { label: 'Shipped flat (-0.5 to +0.5%)', fmt: r => r.invalid ? '—' : r.meanShipFlat.toFixed(2), cls: mark(r => r.meanShipFlat, 'min') },
+        { label: 'Shipped small wins (0.5–2.5%)', fmt: r => r.invalid ? '—' : r.meanShipSmall.toFixed(2), cls: mark(r => r.meanShipSmall, 'max') },
+        { label: 'Shipped big wins (> 2.5%)', fmt: r => r.invalid ? '—' : r.meanShipBig.toFixed(2), cls: mark(r => r.meanShipBig, 'max') },
+
+        { group: 'Quality & Winner\u2019s Curse' },
+        { label: 'Cum true lift / year', fmt: r => r.invalid ? '—' : fmtSigned(r.meanCumLift), cls: mark(r => r.meanCumLift, 'max') },
+        { label: 'Avg true lift / shipped', fmt: r => r.invalid ? '—' : fmtSigned(r.avgLiftPerShip), cls: mark(r => r.avgLiftPerShip, 'max') },
+        { label: 'Avg observed lift / shipped', fmt: r => r.invalid ? '—' : fmtSigned(r.avgObsPerShip) },
+        { label: 'Inflation (obs − true)', fmt: r => r.invalid ? '—' : fmtSigned(r.inflation), cls: mark(r => r.inflation, 'min') },
+      ];
+
+      let html = '<thead><tr><th></th>';
+      results.forEach(r => {
+        html += `<th><span class="design-color-dot" style="background:${DESIGN_COLORS[r.idx]}"></span>Design ${DESIGN_LETTERS[r.idx]}${r.invalid ? ' ⚠' : ''}</th>`;
+      });
+      html += '</tr></thead><tbody>';
+
+      rows.forEach(row => {
+        if (row.group) {
+          html += `<tr class="divider"><th colspan="${results.length + 1}">${row.group}</th></tr>`;
+          return;
+        }
+        html += `<tr><th>${row.label}</th>`;
+        results.forEach(r => {
+          const cls = row.cls ? row.cls(r) : (r.invalid ? 'invalid-cell' : '');
+          html += `<td class="${cls}">${row.fmt(r)}</td>`;
+        });
+        html += '</tr>';
+      });
+
+      html += '</tbody>';
+      table.innerHTML = html;
+    }
+
+    const cbChart = createChart('#compareBarChart', { height: 220, margin: { top: 20, right: 40, bottom: 42, left: 90 } });
+    addAxisLabels(cbChart, 'Mean Cumulative True Lift per Year (%)', '');
+
+    function renderCompareChart(results) {
+      cbChart.g.selectAll('.cb-bar, .cb-label, .cb-zero, .cb-invalid').remove();
+
+      const valid = results.filter(r => !r.invalid);
+      const labels = results.map(r => `Design ${DESIGN_LETTERS[r.idx]}`);
+      const lifts = valid.map(r => r.meanCumLift);
+      const minLift = Math.min(0, ...(lifts.length ? lifts : [0]));
+      const maxLift = Math.max(0, ...(lifts.length ? lifts : [1]));
+      const pad = Math.max((maxLift - minLift) * 0.12, 1);
+
+      cbChart.x = d3.scaleLinear().domain([minLift - pad, maxLift + pad]).range([0, cbChart.width]);
+      cbChart.y = d3.scaleBand().domain(labels).range([0, cbChart.height]).padding(0.2);
+
+      cbChart.xAxisG.call(d3.axisBottom(cbChart.x).ticks(7).tickFormat(d => d.toFixed(1) + '%'));
+      cbChart.yAxisG.call(d3.axisLeft(cbChart.y));
+      cbChart.yGridG.call(d3.axisLeft(cbChart.y).tickSize(-cbChart.width).tickFormat(''));
+      cbChart.yGridG.selectAll('text').remove();
+
+      cbChart.g.append('line').attr('class', 'cb-zero')
+        .attr('x1', cbChart.x(0)).attr('x2', cbChart.x(0))
+        .attr('y1', 0).attr('y2', cbChart.height)
+        .attr('stroke', '#6b7280').attr('stroke-width', 1).attr('stroke-dasharray', '3 3');
+
+      results.forEach(r => {
+        const yPos = cbChart.y(`Design ${DESIGN_LETTERS[r.idx]}`);
+        if (r.invalid) {
+          cbChart.g.append('text').attr('class', 'cb-invalid')
+            .attr('x', cbChart.x(0) + 8).attr('y', yPos + cbChart.y.bandwidth() / 2 + 4)
+            .attr('font-size', 12).attr('font-style', 'italic').attr('fill', '#b45309')
+            .text('runtime > 365 days — not simulated');
+          return;
+        }
+        const x0 = Math.min(cbChart.x(0), cbChart.x(r.meanCumLift));
+        const w = Math.abs(cbChart.x(r.meanCumLift) - cbChart.x(0));
+        cbChart.g.append('rect').attr('class', 'cb-bar')
+          .attr('x', x0).attr('y', yPos)
+          .attr('width', w).attr('height', cbChart.y.bandwidth())
+          .attr('fill', DESIGN_COLORS[r.idx]).attr('rx', 3).attr('opacity', 0.85);
+        cbChart.g.append('text').attr('class', 'cb-label')
+          .attr('x', r.meanCumLift >= 0 ? cbChart.x(r.meanCumLift) + 6 : cbChart.x(r.meanCumLift) - 6)
+          .attr('y', yPos + cbChart.y.bandwidth() / 2 + 4)
+          .attr('text-anchor', r.meanCumLift >= 0 ? 'start' : 'end')
+          .attr('font-size', 12).attr('font-weight', 600).attr('fill', DESIGN_COLORS[r.idx])
+          .text(fmtSigned(r.meanCumLift));
+      });
+    }
+
+    document.getElementById('runCompare').addEventListener('click', () => {
+      lastCompareResults = runComparison();
+      document.getElementById('compareResults').style.display = 'block';
+      renderCompareTable(lastCompareResults);
+      renderCompareChart(lastCompareResults);
+    });
+
+    document.getElementById('resetCompare').addEventListener('click', () => {
+      lastCompareResults = null;
+      document.getElementById('compareResults').style.display = 'none';
+      document.getElementById('compareTable').innerHTML = '';
+      cbChart.g.selectAll('.cb-bar, .cb-label, .cb-zero, .cb-invalid').remove();
+    });
+
+    document.querySelectorAll('#modeToggle .toggle-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#modeToggle .toggle-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const mode = btn.dataset.mode;
+        document.getElementById('singleMode').style.display = mode === 'single' ? 'block' : 'none';
+        document.getElementById('compareMode').style.display = mode === 'compare' ? 'block' : 'none';
+      });
+    });
+
+    // =====================================================================
     // INITIAL RENDER
     // =====================================================================
     updateLiftDistChart();
     updateDesignMetrics();
+    renderDesignCards();
   </script>
 </body>
 </html>
